@@ -47,18 +47,28 @@ jobs:
         run: pytest --cov=openneuro_pipeline --cov-report=term-missing
 
   windows:
-    name: Windows (make install + make test)
+    name: Windows make (${{ matrix.make-shell }})
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # GNU make on Windows uses bash when Git's sh is on PATH, cmd.exe
+        # otherwise. Test both, since developers' machines differ.
+        make-shell: [default, cmd.exe]
+    env:
+      MAKE_ARGS: ${{ matrix.make-shell == 'cmd.exe' && 'SHELL=cmd.exe' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-      # Runs the Makefile exactly as a Windows user would, in cmd.exe.
       - name: Install via make
         shell: cmd
-        run: make install
+        run: make %MAKE_ARGS% install
       - name: Test via make
         shell: cmd
-        run: make test
+        run: make %MAKE_ARGS% test
+      - name: Help and clean via make
+        shell: cmd
+        run: make %MAKE_ARGS% help && make %MAKE_ARGS% clean

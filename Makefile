@@ -3,14 +3,17 @@
 #
 # Portability rules used below:
 #   * Every tool runs as `<venv python> -m <module>`, never as a console script,
-#     because the venv's executables live in .venv\Scripts on Windows but
+#     because the venv's executables live in .venv/Scripts on Windows but
 #     .venv/bin elsewhere.
+#   * On Windows, make may run recipes through cmd.exe (which rejects unquoted
+#     forward-slash paths) or through Git's bash (which strips backslashes).
+#     A quoted forward-slash path works in both.
 #   * No Unix-only commands (rm, grep, awk): file and text work is done in
 #     Python, via scripts/dev.py.
 
 ifeq ($(OS),Windows_NT)
     SYSTEM_PYTHON ?= python
-    VENV_PYTHON := .venv\Scripts\python.exe
+    VENV_PYTHON := ".venv/Scripts/python.exe"
 else
     SYSTEM_PYTHON ?= python3
     VENV_PYTHON := .venv/bin/python
