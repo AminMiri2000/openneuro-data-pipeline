@@ -24,6 +24,8 @@ Each layer depends only on the layers below it.
 | `transform/` (dbt project, repo root) | SQL models, seeds and data tests: raw → marts | Python |
 | `pipeline.py` | Wiring the above together; the only object entry points use | CLI options |
 | `orchestration/` | Dagster assets, schedule, run queue; dbt models via dagster-dbt | how steps are implemented |
+| `alerts/` | Turning outcomes into an email digest | where outcomes come from |
+| `dashboard/` | Static HTML page from the marts | how marts are built |
 | `cli.py` | Parsing options, printing results, exit codes | how anything works |
 
 Because of this split, the CLI and the Dagster assets share one code path,

@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenNeuro EEG Explorer</title>
+<meta name="description" content="Find OpenNeuro EEG datasets by size, task and participant demographics. Refreshed daily by an open-source data pipeline.">
+<style>
+  /* Colour roles from a validated, colour-blind-safe palette. Light and dark
+     values are separate selected steps, not an automatic inversion. */
+  :root {
+    color-scheme: light;
+    --page: #f6f6f4;
+    --surface: #fcfcfb;
+    --border: #e4e3df;
+    --grid: #ecebe7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #6f6e69;
+    --link: #1f63b5;
+    --series-1: #2a78d6;   /* blue: primary series, "standardised" */
+    --series-2: #eb6834;   /* orange: "not standardisable" */
+    --neutral: #b9b8b2;    /* gray: "empty in source" */
+    --status-good: #1b7f3b;
+    --status-warning: #a15c00;
+    --focus: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #121211;
+      --surface: #1a1a19;
+      --border: #2f2f2d;
+      --grid: #262624;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #9a998f;
+      --link: #7fb2f0;
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --neutral: #5d5c57;
+      --status-good: #5cc77d;
+      --status-warning: #e3a33b;
+      --focus: #7fb2f0;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #121211;
+    --surface: #1a1a19;
+    --border: #2f2f2d;
+    --grid: #262624;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #9a998f;
+    --link: #7fb2f0;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --neutral: #5d5c57;
+    --status-good: #5cc77d;
+    --status-warning: #e3a33b;
+    --focus: #7fb2f0;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  a { color: var(--link); }
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, th:focus-visible {
+    outline: 2px solid var(--focus); outline-offset: 2px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+
+  header { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 2px; }
+  .lede { margin: 0; color: var(--text-secondary); max-width: 70ch; }
+  .meta { margin: 8px 0 0; color: var(--text-muted); font-size: 13px; }
+  .theme-toggle {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary);
+    border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 24px 0; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .kpi .label { color: var(--text-secondary); font-size: 13px; }
+  .kpi .value { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .kpi .note { color: var(--text-muted); font-size: 12px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+  .card .sub { color: var(--text-muted); font-size: 13px; margin: 0 0 10px; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart text { fill: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .chart .value-label { fill: var(--text-primary); }
+  .chart .gridline { stroke: var(--grid); stroke-width: 1; }
+  .chart .baseline { stroke: var(--border); stroke-width: 1; }
+  .chart .hit { fill: transparent; cursor: default; }
+  .chart .mark { transition: opacity 120ms; }
+  .chart.hovering .mark:not(.active) { opacity: 0.45; }
+  .tooltip {
+    position: absolute; pointer-events: none; z-index: 2; opacity: 0; transition: opacity 80ms;
+    background: var(--surface); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 9px; font-size: 13px; white-space: nowrap;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+  }
+  .tooltip.show { opacity: 1; }
+  .tooltip .t-label { color: var(--text-secondary); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 8px; font-size: 13px; color: var(--text-secondary); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  details.data-table { margin-top: 8px; font-size: 13px; color: var(--text-secondary); }
+  details.data-table summary { cursor: pointer; }
+  details.data-table table { margin-top: 6px; }
+  .empty { color: var(--text-muted); font-size: 13px; padding: 24px 0; text-align: center; }
+
+  .finder { margin-top: 12px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; margin: 8px 0 12px; }
+  .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-secondary); }
+  .filters label.check { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 6px; }
+  .filters input[type="search"], .filters input[type="number"] {
+    font: inherit; color: var(--text-primary); background: var(--page);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+  }
+  .filters input[type="search"] { width: min(320px, 80vw); }
+  .filters input[type="number"] { width: 90px; }
+  .count { color: var(--text-muted); font-size: 13px; margin-left: auto; padding-bottom: 6px; }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; max-height: 560px; overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { position: sticky; top: 0; background: var(--surface); color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+  th[data-sort] { cursor: pointer; user-select: none; }
+  th[aria-sort="ascending"]::after { content: " ▲"; font-size: 10px; }
+  th[aria-sort="descending"]::after { content: " ▼"; font-size: 10px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td .tasks { color: var(--text-muted); }
+  .bar-cell { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .mini { width: 44px; height: 6px; background: var(--grid); border-radius: 3px; overflow: hidden; }
+  .mini > i { display: block; height: 100%; background: var(--series-1); border-radius: 3px; }
+
+  .quality { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; }
+  .quality > span { min-width: 0; overflow-wrap: anywhere; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  .status svg { width: 16px; height: 16px; }
+  .status.good { color: var(--status-good); }
+  .status.warning { color: var(--status-warning); }
+  footer { margin-top: 32px; color: var(--text-muted); font-size: 13px; }
+  @media (max-width: 520px) { h1 { font-size: 22px; } .kpi .value { font-size: 24px; } .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>OpenNeuro EEG Explorer</h1>
+      <p class="lede">Every public EEG dataset on <a href="https://openneuro.org">OpenNeuro</a>, with participant
+        age, sex and handedness standardised across datasets so you can find the data you need.</p>
+      <p class="meta" id="meta"></p>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch colour theme">Theme</button>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="Key figures"></section>
+
+  <section class="grid" aria-label="Charts">
+    <article class="card"><h2>Datasets published per year</h2><p class="sub">EEG datasets currently on OpenNeuro, by creation year</p><div class="chart" id="chart-years"></div></article>
+    <article class="card"><h2>Subjects per dataset</h2><p class="sub">Number of datasets in each size band</p><div class="chart" id="chart-subjects"></div></article>
+    <article class="card"><h2>Participant age</h2><p class="sub">Participants with a known age, in years</p><div class="chart" id="chart-age"></div></article>
+    <article class="card"><h2>Most common tasks</h2><p class="sub">Datasets using each BIDS task label</p><div class="chart" id="chart-tasks"></div></article>
+    <article class="card"><h2>Demographic standardisation</h2><p class="sub">Share of participant values, per attribute</p><div class="chart" id="chart-standardisation"></div></article>
+    <article class="card"><h2>Catalogue size over time</h2><p class="sub">EEG datasets listed, per daily refresh</p><div class="chart" id="chart-history"></div></article>
+  </section>
+
+  <section class="card finder" aria-labelledby="finder-title">
+    <h2 id="finder-title">Find a dataset</h2>
+    <p class="sub">Filter and sort; dataset ids link to OpenNeuro.</p>
+    <div class="filters">
+      <label>Search name, id or task<input type="search" id="f-text" placeholder="e.g. oddball, visual, sleep"></label>
+      <label>Min. subjects<input type="number" id="f-subjects" min="0" step="1" value="0"></label>
+      <label class="check"><input type="checkbox" id="f-age"> Age known for ≥ 95%</label>
+      <label class="check"><input type="checkbox" id="f-sex"> Sex known for ≥ 95%</label>
+      <span class="count" id="f-count" aria-live="polite"></span>
+    </div>
+    <div class="table-scroll">
+      <table id="finder">
+        <thead><tr>
+          <th data-sort="dataset_id" scope="col" tabindex="0">Dataset</th>
+          <th data-sort="dataset_name" scope="col" tabindex="0">Name and tasks</th>
+          <th data-sort="n_subjects" class="num" scope="col" tabindex="0" aria-sort="descending">Subjects</th>
+          <th data-sort="pct_age_known" class="num" scope="col" tabindex="0">Age known</th>
+          <th data-sort="pct_sex_known" class="num" scope="col" tabindex="0">Sex known</th>
+          <th data-sort="age_median_years" class="num" scope="col" tabindex="0">Median age</th>
+          <th data-sort="size_gb" class="num" scope="col" tabindex="0">Size (GB)</th>
+          <th data-sort="year" class="num" scope="col" tabindex="0">Year</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:12px" aria-labelledby="quality-title">
+    <h2 id="quality-title">Data quality</h2>
+    <p class="sub">Results of the dbt data tests in the latest refresh</p>
+    <div class="quality" id="quality"></div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script id="dashboard-data" type="application/json">/*__DASHBOARD_DATA__*/null</script>
+<script>
+(() => {
+  "use strict";
+  const DATA = JSON.parse(document.getElementById("dashboard-data").textContent);
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const nf = new Intl.NumberFormat("en");
+  const pf = new Intl.NumberFormat("en", { style: "percent", maximumFractionDigits: 0 });
+  const fmt = (v) => (v === null || v === undefined ? "–" : nf.format(v));
+  const pct = (v) => (v === null || v === undefined ? "–" : pf.format(v));
+
+  // ---------------------------------------------------------------- theme
+  const root = document.documentElement;
+  const toggle = document.getElementById("theme-toggle");
+  const currentTheme = () => root.dataset.theme ||
+    (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const labelToggle = () => { toggle.textContent = currentTheme() === "dark" ? "Light theme" : "Dark theme"; };
+  try { const saved = localStorage.getItem("theme"); if (saved) root.dataset.theme = saved; } catch (e) { /* storage unavailable */ }
+  labelToggle();
+  toggle.addEventListener("click", () => {
+    root.dataset.theme = currentTheme() === "dark" ? "light" : "dark";
+    try { localStorage.setItem("theme", root.dataset.theme); } catch (e) { /* ignore */ }
+    labelToggle();
+  });
+
+  // --------------------------------------------------------------- helpers
+  function el(tag, attrs = {}, text) {
+    const node = tag.startsWith("svg:") ? document.createElementNS(SVG_NS, tag.slice(4)) : document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  function niceMax(max) {
+    if (max <= 0) return 1;
+    const step = Math.pow(10, Math.floor(Math.log10(max)));
+    for (const m of [1, 2, 2.5, 5, 10]) if (m * step >= max) return m * step;
+    return 10 * step;
+  }
+  function attachTooltip(container) {
+    const tip = el("div", { class: "tooltip", role: "status" });
+    container.appendChild(tip);
+    return {
+      show(html, x, y) {
+        tip.innerHTML = html;
+        const box = container.getBoundingClientRect();
+        const w = tip.offsetWidth;
+        const left = Math.min(Math.max(x - w / 2, 0), box.width - w);
+        tip.style.left = left + "px";
+        tip.style.top = Math.max(y - tip.offsetHeight - 10, 0) + "px";
+        tip.classList.add("show");
+      },
+      hide() { tip.classList.remove("show"); },
+    };
+  }
+  function dataTable(container, rows, columns) {
+    const details = el("details", { class: "data-table" });
+    details.appendChild(el("summary", {}, "Show data"));
+    const table = el("table");
+    const head = el("tr");
+    columns.forEach((c) => head.appendChild(el("th", { class: c.num ? "num" : "" }, c.label)));
+    table.appendChild(el("thead")).appendChild(head);
+    const body = table.appendChild(el("tbody"));
+    rows.forEach((r) => {
+      const tr = body.appendChild(el("tr"));
+      columns.forEach((c) => tr.appendChild(el("td", { class: c.num ? "num" : "" }, c.format ? c.format(r[c.key]) : r[c.key])));
+    });
+    const scroller = el("div", { style: "overflow-x:auto" });
+    scroller.appendChild(table);
+    details.appendChild(scroller);
+    container.appendChild(details);
+  }
+  function emptyState(container, message) { container.appendChild(el("p", { class: "empty" }, message)); }
+  // A bar path with 4px rounded ends at the data end and a square baseline end.
+  function barPath(x, y, w, h, horizontal) {
+    const r = Math.min(4, horizontal ? h / 2 : w / 2, horizontal ? w : h);
+    if (w <= 0 || h <= 0) return "";
+    return horizontal
+      ? `M${x},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x} Z`
+      : `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
+  }
+
+  // ----------------------------------------------------------- bar charts
+  // Charts are drawn at their container's real width, so text stays at its
+  // CSS size on every screen; a resize redraws them (see drawAll).
+  const widthOf = (container) => Math.max(container.clientWidth, 260);
+
+  function columnChart(id, rows, unit) {
+    const container = document.getElementById(id);
+    if (!rows.length) return emptyState(container, "No data yet.");
+    const W = widthOf(container), H = 240, m = { t: 20, r: 8, b: 26, l: 44 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const max = niceMax(Math.max(...rows.map((r) => r.value)));
+    const band = iw / rows.length, gap = Math.min(band * 0.28, 14), bw = band - gap;
+    const svg = el("svg:svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": container.parentElement.querySelector("h2").textContent });
+    for (let i = 0; i <= 4; i++) {
+      const v = (max / 4) * i, y = m.t + ih - (v / max) * ih;
+      svg.appendChild(el("svg:line", { class: i === 0 ? "baseline" : "gridline", x1: m.l, x2: W - m.r, y1: y, y2: y }));
+      svg.appendChild(el("svg:text", { x: m.l - 8, y: y + 4, "text-anchor": "end" }, nf.format(v)));
+    }
+    const tip = attachTooltip(container);
+    const labelEvery = Math.ceil(rows.length / Math.floor(iw / 38));
+    // Long bucket labels ("100-249") in narrow bars get a smaller font
+    // instead of touching their neighbours.
+    const longest = Math.max(...rows.map((r) => String(r.label).length));
+    const labelStyle = band < longest * 7.2 + 6 ? "font-size:10px" : "";
+    rows.forEach((r, i) => {
+      const x = m.l + i * band + gap / 2, h = (r.value / max) * ih, y = m.t + ih - h;
+      const mark = svg.appendChild(el("svg:path", { class: "mark", d: barPath(x, y, bw, h, false), fill: "var(--series-1)" }));
+      if (i % labelEvery === 0) svg.appendChild(el("svg:text", { x: x + bw / 2, y: H - 8, "text-anchor": "middle", style: labelStyle }, r.label));
+      const hit = svg.appendChild(el("svg:rect", { class: "hit", x: m.l + i * band, y: m.t, width: band, height: ih }));
+      const enter = () => {
+        container.classList.add("hovering"); mark.classList.add("active");
+        const scale = container.getBoundingClientRect().width / W;
+        tip.show(`<span class="t-label">${r.label}</span> &nbsp;<b>${fmt(r.value)}</b> ${unit}`, (x + bw / 2) * scale, y * scale);
+      };
+      const leave = () => { container.classList.remove("hovering"); mark.classList.remove("active"); tip.hide(); };
+      hit.addEventListener("mouseenter", enter); hit.addEventListener("mouseleave", leave);
+    });
+    container.prepend(svg);
+    dataTable(container, rows, [{ key: "label", label: "Group" }, { key: "value", label: unit, num: true, format: fmt }]);
+  }
+
+  function barChart(id, rows, unit) {
+    const container = document.getElementById(id);
+    if (!rows.length) return emptyState(container, "No data yet.");
+    const row = 24, W = widthOf(container), m = { t: 4, r: 40, b: 4, l: Math.min(150, W * 0.38) };
+    const H = m.t + m.b + rows.length * row, iw = W - m.l - m.r;
+    const max = Math.max(...rows.map((r) => r.value));
+    const svg = el("svg:svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": container.parentElement.querySelector("h2").textContent });
+    svg.appendChild(el("svg:line", { class: "baseline", x1: m.l, x2: m.l, y1: m.t, y2: H - m.b }));
+    const tip = attachTooltip(container);
+    rows.forEach((r, i) => {
+      const y = m.t + i * row + 3, h = row - 6, w = (r.value / max) * iw;
+      const maxChars = Math.floor((m.l - 10) / 6.5);
+      const label = r.label.length > maxChars ? r.label.slice(0, maxChars - 1) + "…" : r.label;
+      svg.appendChild(el("svg:text", { x: m.l - 8, y: y + h / 2 + 4, "text-anchor": "end" }, label));
+      const mark = svg.appendChild(el("svg:path", { class: "mark", d: barPath(m.l, y, w, h, true), fill: "var(--series-1)" }));
+      svg.appendChild(el("svg:text", { class: "value-label", x: m.l + w + 6, y: y + h / 2 + 4 }, fmt(r.value)));
+      const hit = svg.appendChild(el("svg:rect", { class: "hit", x: 0, y: m.t + i * row, width: W, height: row }));
+      hit.addEventListener("mouseenter", () => {
+        container.classList.add("hovering"); mark.classList.add("active");
+        const scale = container.getBoundingClientRect().width / W;
+        tip.show(`<span class="t-label">${r.label}</span> &nbsp;<b>${fmt(r.value)}</b> ${unit}`, (m.l + w / 2) * scale, y * scale);
+      });
+      hit.addEventListener("mouseleave", () => { container.classList.remove("hovering"); mark.classList.remove("active"); tip.hide(); });
+    });
+    container.prepend(svg);
+    dataTable(container, rows, [{ key: "label", label: "Task" }, { key: "value", label: unit, num: true, format: fmt }]);
+  }
+
+  // ------------------------------------------- 100% stacked bars (3 series)
+  function stackedChart(id, rows) {
+    const container = document.getElementById(id);
+    if (!rows.length) return emptyState(container, "No data yet.");
+    const series = [
+      { key: "standardised", label: "Standardised", color: "var(--series-1)" },
+      { key: "empty_in_source", label: "Empty in source", color: "var(--neutral)" },
+      { key: "not_standardisable", label: "Not standardisable", color: "var(--series-2)" },
+    ];
+    const legend = el("div", { class: "legend" });
+    series.forEach((s) => { const item = legend.appendChild(el("span")); item.appendChild(el("i", { class: "swatch", style: `background:${s.color}` })); item.append(s.label); });
+    container.appendChild(legend);
+    const row = 40, W = widthOf(container), m = { t: 4, r: 8, b: 4, l: 84 };
+    const H = m.t + m.b + rows.length * row, iw = W - m.l - m.r;
+    const svg = el("svg:svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Demographic standardisation by attribute" });
+    const tip = attachTooltip(container);
+    rows.forEach((r, i) => {
+      const total = series.reduce((sum, s) => sum + r[s.key], 0) || 1;
+      const y = m.t + i * row + 8, h = row - 16;
+      svg.appendChild(el("svg:text", { x: m.l - 10, y: y + h / 2 + 4, "text-anchor": "end" }, r.attribute));
+      let x = m.l;
+      series.forEach((s, j) => {
+        const w = (r[s.key] / total) * iw;
+        if (w <= 0) return;
+        const gapW = j < series.length - 1 ? 2 : 0;  // 2px surface gap between segments
+        const mark = svg.appendChild(el("svg:rect", { class: "mark", x, y, width: Math.max(w - gapW, 0.5), height: h, rx: 3, fill: s.color }));
+        if (j === 0 && w > 44) svg.appendChild(el("svg:text", { x: x + 8, y: y + h / 2 + 4, fill: "#fff", style: "fill:#fff;font-weight:600" }, pct(r[s.key] / total)));
+        const hit = svg.appendChild(el("svg:rect", { class: "hit", x, y: y - 4, width: w, height: h + 8 }));
+        const cx = x + w / 2;
+        hit.addEventListener("mouseenter", () => {
+          container.classList.add("hovering"); mark.classList.add("active");
+          const scale = container.getBoundingClientRect().width / W;
+          tip.show(`<span class="t-label">${r.attribute} · ${s.label}</span> &nbsp;<b>${pct(r[s.key] / total)}</b> (${fmt(r[s.key])})`, cx * scale, (y + legend.offsetHeight / scale) * scale);
+        });
+        hit.addEventListener("mouseleave", () => { container.classList.remove("hovering"); mark.classList.remove("active"); tip.hide(); });
+        x += w;
+      });
+    });
+    container.insertBefore(svg, legend.nextSibling);
+    dataTable(container, rows, [
+      { key: "attribute", label: "Attribute" },
+      ...series.map((s) => ({ key: s.key, label: s.label, num: true, format: fmt })),
+    ]);
+  }
+
+  // ------------------------------------------------------------ line chart
+  function lineChart(id, rows, unit) {
+    const container = document.getElementById(id);
+    if (rows.length < 2) {
+      emptyState(container, rows.length
+        ? `${fmt(rows[0].value)} datasets on ${rows[0].label}. The trend line appears after the second daily refresh.`
+        : "No data yet.");
+      return;
+    }
+    const W = widthOf(container), H = 240, m = { t: 20, r: 24, b: 26, l: 44 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const values = rows.map((r) => r.value);
+    let lo = Math.min(...values), hi = Math.max(...values);
+    const pad = Math.max((hi - lo) * 0.2, 1); lo = Math.max(0, Math.floor(lo - pad)); hi = Math.ceil(hi + pad);
+    const xs = (i) => m.l + (rows.length === 1 ? iw / 2 : (i / (rows.length - 1)) * iw);
+    const ys = (v) => m.t + ih - ((v - lo) / (hi - lo)) * ih;
+    const svg = el("svg:svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Catalogue size over time" });
+    for (let i = 0; i <= 4; i++) {
+      const v = lo + ((hi - lo) / 4) * i, y = ys(v);
+      svg.appendChild(el("svg:line", { class: i === 0 ? "baseline" : "gridline", x1: m.l, x2: W - m.r, y1: y, y2: y }));
+      svg.appendChild(el("svg:text", { x: m.l - 8, y: y + 4, "text-anchor": "end" }, nf.format(Math.round(v))));
+    }
+    const d = rows.map((r, i) => `${i ? "L" : "M"}${xs(i)},${ys(r.value)}`).join(" ");
+    svg.appendChild(el("svg:path", { d, fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    const step = Math.ceil(rows.length / 5);
+    rows.forEach((r, i) => {
+      if (i % step !== 0 && i !== rows.length - 1) return;
+      // The outermost labels are anchored inwards so they never meet the y axis labels.
+      const anchor = i === 0 ? "start" : i === rows.length - 1 ? "end" : "middle";
+      svg.appendChild(el("svg:text", { x: xs(i), y: H - 8, "text-anchor": anchor }, r.label.slice(5)));
+    });
+    const cross = svg.appendChild(el("svg:line", { class: "gridline", y1: m.t, y2: m.t + ih, style: "display:none" }));
+    const dot = svg.appendChild(el("svg:circle", { r: 4.5, fill: "var(--series-1)", stroke: "var(--surface)", "stroke-width": 2, style: "display:none" }));
+    const tip = attachTooltip(container);
+    const hit = svg.appendChild(el("svg:rect", { class: "hit", x: m.l, y: m.t, width: iw, height: ih }));
+    hit.addEventListener("mousemove", (ev) => {
+      const box = svg.getBoundingClientRect(), scale = box.width / W;
+      const px = (ev.clientX - box.left) / scale;
+      const i = Math.round(((px - m.l) / iw) * (rows.length - 1));
+      const r = rows[Math.max(0, Math.min(rows.length - 1, i))], idx = rows.indexOf(r);
+      cross.setAttribute("x1", xs(idx)); cross.setAttribute("x2", xs(idx)); cross.style.display = "";
+      dot.setAttribute("cx", xs(idx)); dot.setAttribute("cy", ys(r.value)); dot.style.display = "";
+      tip.show(`<span class="t-label">${r.label}</span> &nbsp;<b>${fmt(r.value)}</b> ${unit}`, xs(idx) * scale, ys(r.value) * scale);
+    });
+    hit.addEventListener("mouseleave", () => { cross.style.display = "none"; dot.style.display = "none"; tip.hide(); });
+    container.prepend(svg);
+    dataTable(container, rows, [{ key: "label", label: "Date" }, { key: "value", label: unit, num: true, format: fmt }]);
+  }
+
+  // ------------------------------------------------------------- header/KPIs
+  const s = DATA.summary;
+  const generated = new Date(DATA.generated_at);
+  document.getElementById("meta").textContent =
+    `Catalogue of ${s.latest_ingest_date} · page built ${generated.toLocaleString("en", { dateStyle: "medium", timeStyle: "short" })}`;
+  const kpis = [
+    { label: "EEG datasets", value: fmt(s.n_datasets), note: `${fmt(s.n_with_participants)} with a participants table` },
+    { label: "Participants", value: fmt(s.n_participants), note: `${fmt(s.n_subjects)} subject folders` },
+    { label: "Data volume", value: `${s.total_tb ?? 0} TB`, note: "latest snapshots combined" },
+    { label: "Age known", value: pct(DATA.demographics_known.age), note: "of participants" },
+    { label: "Sex known", value: pct(DATA.demographics_known.sex), note: "of participants" },
+  ];
+  const kpiRoot = document.getElementById("kpis");
+  kpis.forEach((k) => {
+    const card = kpiRoot.appendChild(el("div", { class: "kpi" }));
+    card.appendChild(el("div", { class: "label" }, k.label));
+    card.appendChild(el("div", { class: "value" }, k.value));
+    card.appendChild(el("div", { class: "note" }, k.note));
+  });
+
+  function drawAll() {
+    ["chart-years", "chart-subjects", "chart-age", "chart-tasks", "chart-standardisation", "chart-history"]
+      .forEach((id) => { document.getElementById(id).replaceChildren(); });
+    columnChart("chart-years", DATA.datasets_by_year, "datasets");
+    columnChart("chart-subjects", DATA.subjects_per_dataset, "datasets");
+    columnChart("chart-age", DATA.age_distribution, "participants");
+    barChart("chart-tasks", DATA.top_tasks, "datasets");
+    stackedChart("chart-standardisation", DATA.standardisation);
+    lineChart("chart-history", DATA.catalogue_history, "datasets");
+  }
+  drawAll();
+  let resizeTimer, lastWidth = window.innerWidth;
+  window.addEventListener("resize", () => {
+    if (window.innerWidth === lastWidth) return;  // ignore mobile toolbar height changes
+    lastWidth = window.innerWidth;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(drawAll, 150);
+  });
+
+  // ---------------------------------------------------------------- finder
+  const rows = DATA.datasets.map((d) => ({ ...d, search: [d.dataset_id, d.dataset_name, ...(d.tasks || [])].join(" ").toLowerCase() }));
+  const tbody = document.querySelector("#finder tbody");
+  const inputs = { text: "f-text", subjects: "f-subjects", age: "f-age", sex: "f-sex" };
+  Object.values(inputs).forEach((id) => document.getElementById(id).addEventListener("input", renderFinder));
+  let sortKey = "n_subjects", sortDir = -1;
+  document.querySelectorAll("#finder th[data-sort]").forEach((th) => {
+    const sort = () => {
+      const key = th.dataset.sort;
+      sortDir = key === sortKey ? -sortDir : (["dataset_id", "dataset_name"].includes(key) ? 1 : -1);
+      sortKey = key;
+      document.querySelectorAll("#finder th").forEach((h) => h.removeAttribute("aria-sort"));
+      th.setAttribute("aria-sort", sortDir === 1 ? "ascending" : "descending");
+      renderFinder();
+    };
+    th.addEventListener("click", sort);
+    th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sort(); } });
+  });
+  function miniBar(v) {
+    if (v === null || v === undefined) return "–";
+    return `<span class="bar-cell">${pct(v)}<span class="mini" aria-hidden="true"><i style="width:${Math.round(v * 100)}%"></i></span></span>`;
+  }
+  const escapeHtml = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function renderFinder() {
+    const text = document.getElementById(inputs.text).value.trim().toLowerCase();
+    const minSubjects = Number(document.getElementById(inputs.subjects).value) || 0;
+    const needAge = document.getElementById(inputs.age).checked;
+    const needSex = document.getElementById(inputs.sex).checked;
+    const shown = rows
+      .filter((r) => (!text || r.search.includes(text))
+        && (r.n_subjects ?? 0) >= minSubjects
+        && (!needAge || (r.pct_age_known ?? 0) >= 0.95)
+        && (!needSex || (r.pct_sex_known ?? 0) >= 0.95))
+      .sort((a, b) => {
+        const x = a[sortKey], y = b[sortKey];
+        if (x === y) return 0;
+        if (x === null || x === undefined) return 1;
+        if (y === null || y === undefined) return -1;
+        return (x > y ? 1 : -1) * sortDir;
+      });
+    document.getElementById("f-count").textContent = `${fmt(shown.length)} of ${fmt(rows.length)} datasets`;
+    tbody.innerHTML = shown.map((r) => `<tr>
+      <td><a href="${escapeHtml(r.openneuro_url)}" target="_blank" rel="noopener">${escapeHtml(r.dataset_id)}</a></td>
+      <td>${escapeHtml(r.dataset_name || "(untitled)")}<div class="tasks">${escapeHtml((r.tasks || []).join(", "))}</div></td>
+      <td class="num">${fmt(r.n_subjects)}</td>
+      <td class="num">${miniBar(r.pct_age_known)}</td>
+      <td class="num">${miniBar(r.pct_sex_known)}</td>
+      <td class="num">${r.age_median_years ?? "–"}</td>
+      <td class="num">${r.size_gb ?? "–"}</td>
+      <td class="num">${r.year ?? "–"}</td></tr>`).join("");
+  }
+  renderFinder();
+
+  // --------------------------------------------------------------- quality
+  const quality = document.getElementById("quality");
+  const q = DATA.quality;
+  const icon = (kind) => kind === "good"
+    ? '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.8 8.2l2.1 2.1 4.3-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    : '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8L15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6.2v3.6M8 11.6v.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  if (!q) {
+    quality.appendChild(el("span", { class: "empty" }, "No test results recorded for this build."));
+  } else {
+    const problems = q.warnings.length;
+    const status = el("span", { class: `status ${problems ? "warning" : "good"}` });
+    status.innerHTML = `${icon(problems ? "warning" : "good")} ${problems ? `${problems} check${problems > 1 ? "s need" : " needs"} attention` : "All checks passed"}`;
+    quality.appendChild(status);
+    quality.appendChild(el("span", {}, `${fmt(q.n_tests)} tests run: ` +
+      Object.entries(q.by_status).map(([k, v]) => `${fmt(v)} ${k}`).join(", ")));
+    if (problems) quality.appendChild(el("span", {}, `Attention: ${q.warnings.join(", ")}`));
+  }
+
+  const footer = document.getElementById("footer");
+  footer.innerHTML = "Data: <a href=\"https://openneuro.org\">OpenNeuro</a> dataset metadata (each dataset has its own licence). " +
+    "Built by an open-source pipeline: Python extract, DuckDB, dbt models and tests, Dagster orchestration. " +
+    (DATA.repo_url ? `<a href="${escapeHtml(DATA.repo_url)}">Source code</a> · ` : "") +
+    (DATA.docs_url ? `<a href="${escapeHtml(DATA.docs_url)}">Data model documentation</a> · ` : "") +
+    '<a href="data.json">Download the numbers (JSON)</a>';
+})();
+</script>
+</body>
+</html>

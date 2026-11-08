@@ -1,0 +1,12 @@
+version: 2
+
+data_tests:
+  - name: catalogue_did_not_shrink
+    description: >
+      The latest catalogue has at most `max_catalogue_drop` fewer datasets than
+      the previous day's. Warn-level: a drop is worth a look, not a stopped pipeline.
+  - name: demographics_standardisation_rate
+    description: >
+      At least `min_standardisation_rate` of the age, sex and handedness values
+      that datasets provide are standardised. Failing rows show the attribute,
+      its counts and its rate.

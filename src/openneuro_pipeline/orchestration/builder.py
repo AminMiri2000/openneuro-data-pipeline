@@ -12,6 +12,7 @@ from ..config import Settings
 from .assets import openneuro_catalogue, openneuro_participant_files, raw_tables
 from .dbt_assets import build_dbt_assets
 from .resources import PipelineResource
+from .sensors import email_on_check_warnings, email_on_run_failure, email_on_stale_data
 
 # 06:17 Toronto time: after OpenNeuro's overnight activity, and off the hour
 # so it does not compete with the many jobs everyone schedules at :00.
@@ -43,5 +44,6 @@ def build_definitions(settings: Settings | None = None) -> Definitions:
         assets=[openneuro_catalogue, openneuro_participant_files, raw_tables, dbt_models],
         jobs=[daily_refresh],
         schedules=[daily_schedule],
+        sensors=[email_on_run_failure, email_on_check_warnings, email_on_stale_data],
         resources={"pipeline": PipelineResource(), "dbt": dbt_resource},
     )
