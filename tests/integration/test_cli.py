@@ -165,3 +165,21 @@ def test_dashboard_command(env, mocked_api):
     assert result.exit_code == 0, result.output
     assert (env / "site" / "index.html").is_file()
     assert "4 datasets" in result.output
+
+
+def test_notify_does_not_repeat_an_ongoing_warning(env, captured_alerts, monkeypatch):
+    import responses as rsps_lib
+
+    from tests.conftest import register_catalogue
+
+    def run_with_failing_download():
+        with rsps_lib.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+            register_catalogue(rsps)
+            for ds in ("ds000002", "ds000003"):
+                rsps.add(rsps_lib.GET, f"{S3_URL}/{ds}/participants.tsv", status=404)
+            rsps.add(rsps_lib.GET, f"{S3_URL}/ds000001/participants.tsv", status=500)
+            return CliRunner().invoke(main, ["run", "--skip-transform", "--notify"])
+
+    run_with_failing_download()
+    run_with_failing_download()  # same dataset still failing the next day
+    assert len(captured_alerts) == 1

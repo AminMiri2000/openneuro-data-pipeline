@@ -86,6 +86,12 @@ Problems are reported by email (Gmail) from both places the pipeline runs.
 | Data stops refreshing | `email_on_stale_data` sensor (no refresh for 26 hours) | GitHub's failed-workflow email |
 | Everything is fine | nothing is sent | nothing is sent |
 
+Each warning is emailed **once**, when it first appears. If it persists, later
+emails only count it ("also still present"). It is reported again only if it
+clears and comes back. Failures are always emailed. A permanent upstream quirk
+(the live data has one dataset listing a participant twice) therefore doesn't
+turn into a daily email that trains you to ignore alerts.
+
 Data-quality rules are dbt tests, so they run in every build and show up as
 Dagster asset checks. Warn-level rules (`transform/tests/data_quality/`)
 include the catalogue shrinking by more than 10% day on day and fewer than 95%

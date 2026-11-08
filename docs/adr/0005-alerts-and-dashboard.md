@@ -22,8 +22,12 @@ Phase 4 adds alerting and a public dashboard, still at no cost.
    environment variables (`.env` locally, repository secrets in CI). The CLI
    (`run --notify`) and the Dagster sensors use the same module, so the email
    looks the same wherever the run happened.
-3. **Silence when healthy.** Digests are sent only for failures or warnings.
-   The stale-data alert fires at most once a day.
+3. **Silence when healthy, and no repeats.** Digests are sent only for
+   failures or warnings, and each warning only when it first appears (or
+   returns after clearing). A small alert memory in the pipeline state records
+   what was already reported. The first real run showed why: one OpenNeuro
+   dataset lists a participant twice, which would otherwise email every day.
+   Failures are never filtered. The stale-data alert fires at most once a day.
 4. **Alerting never breaks the pipeline.** A mail error is logged, not raised:
    a broken alert channel must not turn a good refresh into a failed one.
 5. **A static dashboard on GitHub Pages.** A daily GitHub Actions workflow

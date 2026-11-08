@@ -57,7 +57,7 @@ def test_check_warnings_digest_lists_failed_checks(defs, instance, sent):
     sensors.email_on_check_warnings(_status_context(instance, result, DagsterRunStatus.SUCCESS))
 
     [digest] = sent
-    assert "raw_files/openneuro_participant_files: no_failed_downloads" in digest.issues[0].details
+    assert "no_failed_downloads (raw_files/openneuro_participant_files)" in digest.issues[0].details
     assert digest.link.endswith(result.run_id)
 
 

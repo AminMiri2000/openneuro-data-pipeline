@@ -23,7 +23,9 @@ from dagster import (
     sensor,
 )
 
-from ..alerts import Digest, EmailSettings, Issue, Severity, send_digest
+from ..alerts import AlertMemory, Digest, EmailSettings, Issue, Severity, send_digest
+from ..config import Settings
+from ..storage import LocalObjectStore
 from .assets import CATALOGUE_KEY
 
 SOURCE = "Dagster"
@@ -45,7 +47,8 @@ def failed_check_issues(context: RunStatusSensorContext) -> list[Issue]:
         event = entry.dagster_event
         evaluation = event.event_specific_data if event else None
         if isinstance(evaluation, AssetCheckEvaluation) and not evaluation.passed:
-            details.append(f"{evaluation.asset_key.to_user_string()}: {evaluation.check_name}")
+            # "check (asset)": no ": ", so the whole line identifies the warning.
+            details.append(f"{evaluation.check_name} ({evaluation.asset_key.to_user_string()})")
     if not details:
         return []
     return [Issue(Severity.WARNING, f"{len(details)} check(s) did not pass", tuple(details))]
@@ -74,14 +77,16 @@ def email_on_run_failure(context: RunFailureSensorContext) -> None:
     description="After a successful run, email a digest of checks that warned.",
 )
 def email_on_check_warnings(context: RunStatusSensorContext) -> None:
-    issues = failed_check_issues(context)
-    if not issues:  # a clean run sends nothing: no alert fatigue
-        return
     run = context.dagster_run
-    send_digest(
-        Digest(source=f"{SOURCE} {run.job_name}", issues=issues, link=_run_link(run.run_id)),
-        EmailSettings.from_env(),
+    digest = Digest(
+        source=f"{SOURCE} {run.job_name}",
+        issues=failed_check_issues(context),
+        link=_run_link(run.run_id),
     )
+    # Report each warning once, not on every run while it persists.
+    digest = AlertMemory(LocalObjectStore(Settings.from_env().raw_dir)).only_new(digest)
+    if digest.issues:
+        send_digest(digest, EmailSettings.from_env())
 
 
 @sensor(

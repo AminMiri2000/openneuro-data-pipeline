@@ -22,7 +22,7 @@ import click
 import duckdb
 from dotenv import load_dotenv
 
-from .alerts import Digest, EmailSettings, digest_from_pipeline_result, send_digest
+from .alerts import AlertMemory, Digest, EmailSettings, digest_from_pipeline_result, send_digest
 from .alerts.digest import failure_digest
 from .config import Settings
 from .errors import ConfigError, PipelineError
@@ -281,8 +281,11 @@ def run_cmd(
             send_digest(failure_digest(source, exc, link), email)
         raise
     if notify:
-        digest = digest_from_pipeline_result(result, source, link)
-        if digest.issues:  # a clean run sends nothing: no alert fatigue
+        # Only warnings not already reported by an earlier run are emailed.
+        digest = AlertMemory(pipeline.store).only_new(
+            digest_from_pipeline_result(result, source, link)
+        )
+        if digest.issues:  # nothing new: no email, no alert fatigue
             send_digest(digest, email)
     _echo_json(
         {

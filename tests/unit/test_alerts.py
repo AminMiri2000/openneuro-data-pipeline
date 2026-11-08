@@ -95,3 +95,30 @@ def test_unconfigured_email_logs_digest(caplog):
     caplog.set_level("INFO")
     assert send_digest(Digest("X", issues=[Issue(Severity.WARNING, "w")]), None) is False
     assert "WARNING: w" in caplog.text
+
+
+def test_memory_reports_each_warning_once(tmp_path):
+    from openneuro_pipeline.alerts import AlertMemory
+    from openneuro_pipeline.storage import LocalObjectStore
+
+    memory = AlertMemory(LocalObjectStore(tmp_path))
+
+    def run(*details, failure=False):
+        issues = [Issue(Severity.WARNING, "checks warned", details)] if details else []
+        if failure:
+            issues.append(Issue(Severity.FAILURE, "broken"))
+        return memory.only_new(Digest("Daily", issues=issues))
+
+    first = run("dup_ids: Got 1 result", "ds1@1.0: HTTP 500")
+    assert len(first.issues[0].details) == 2
+
+    second = run("dup_ids: Got 2 results", "ds1@1.0: HTTP 500")  # same warnings, new counts
+    assert second.issues == [] and second.ongoing_warnings == 2
+
+    third = run("dup_ids: Got 2 results", "new_check: Got 1 result")
+    assert third.issues[0].details == ("new_check: Got 1 result",)
+    assert "Also still present, reported earlier: 1" in third.render_text()
+
+    run()  # everything resolved
+    assert run("dup_ids: Got 1 result").issues  # a returning warning is new again
+    assert run(failure=True).has_failures  # failures are never filtered

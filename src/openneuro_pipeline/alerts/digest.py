@@ -38,6 +38,8 @@ class Digest:
     issues: list[Issue] = field(default_factory=list)
     link: str | None = None  # where to look next: run page, workflow logs, ...
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # Warnings still present but already reported in an earlier email.
+    ongoing_warnings: int = 0
 
     @property
     def has_failures(self) -> bool:
@@ -67,6 +69,11 @@ class Digest:
             lines.extend(f"  - {detail}" for detail in shown)
             if len(issue.details) > len(shown):
                 lines.append(f"  ... and {len(issue.details) - len(shown)} more")
+            lines.append("")
+        if self.ongoing_warnings:
+            lines.append(
+                f"Also still present, reported earlier: {self.ongoing_warnings} warning(s)."
+            )
             lines.append("")
         if self.link:
             lines.append(f"Details: {self.link}")
