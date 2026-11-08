@@ -3,9 +3,9 @@
 ## Layers
 
 ```
-cli ─┐
-     ├─> pipeline ──> extract ──> sources (OpenNeuro client)
-dagster (phase 3) ┘        │  └──> storage (object store, layout, state)
+cli ───────┐
+dagster ───┴─> pipeline ──> extract ──> sources (OpenNeuro client)
+                           │  └──> storage (object store, layout, state)
                            ├─> load ───> storage
                            │        └──> DuckDB warehouse (raw schema)
                            └─> transform ──> dbt project (transform/)
@@ -23,10 +23,11 @@ Each layer depends only on the layers below it.
 | `transform/` | Running the dbt project in-process | how models are written |
 | `transform/` (dbt project, repo root) | SQL models, seeds and data tests: raw → marts | Python |
 | `pipeline.py` | Wiring the above together; the only object entry points use | CLI options |
+| `orchestration/` | Dagster assets, schedule, run queue; dbt models via dagster-dbt | how steps are implemented |
 | `cli.py` | Parsing options, printing results, exit codes | how anything works |
 
-Because of this split, the CLI and the phase-3 Dagster assets share one code
-path, and any implementation can be swapped by changing `pipeline.py` alone.
+Because of this split, the CLI and the Dagster assets share one code path,
+and any implementation can be swapped by changing `pipeline.py` alone.
 
 ## Scalability
 
@@ -47,8 +48,9 @@ Each concern below names the limit it addresses and how to grow past it.
 
 ### Known limits
 
-- DuckDB permits one writer, so two pipeline runs must not load at the same
-  time. The orchestrator (phase 3) will enforce a single concurrent run.
+- DuckDB permits one writer. Dagster's run queue runs one job at a time, but
+  a manual `make run` started while a Dagster run is loading will still hit a
+  locked warehouse. Run manual commands with Dagster idle, or through the UI.
 - The watermark is a JSON file. Beyond ~100k keys it should move into a
   database table, a change contained in `storage/state.py`.
 
