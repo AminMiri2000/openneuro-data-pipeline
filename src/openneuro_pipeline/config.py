@@ -34,6 +34,9 @@ class Settings:
         insert_batch_size: Rows per INSERT batch when loading the warehouse,
             which bounds memory use regardless of data volume.
         user_agent: Identifies this client to OpenNeuro.
+        dbt_project_dir: Folder holding dbt_project.yml (relative paths are
+            resolved against the current directory, i.e. the repository root
+            when run through make).
     """
 
     graphql_url: str = DEFAULT_GRAPHQL_URL
@@ -43,7 +46,8 @@ class Settings:
     request_timeout: float = 60.0
     max_workers: int = 4
     insert_batch_size: int = 5_000
-    user_agent: str = "openneuro-data-pipeline/0.2 (portfolio project)"
+    user_agent: str = "openneuro-data-pipeline/0.3 (portfolio project)"
+    dbt_project_dir: Path = Path("transform")
 
     def __post_init__(self) -> None:
         if not 1 <= self.page_size <= 500:
@@ -68,6 +72,7 @@ class Settings:
                 request_timeout=float(env.get("OPENNEURO_TIMEOUT", "60")),
                 max_workers=int(env.get("PIPELINE_MAX_WORKERS", "4")),
                 insert_batch_size=int(env.get("PIPELINE_INSERT_BATCH_SIZE", "5000")),
+                dbt_project_dir=Path(env.get("PIPELINE_DBT_PROJECT_DIR", "transform")).expanduser(),
             )
         except ValueError as exc:  # e.g. OPENNEURO_PAGE_SIZE=abc
             raise ConfigError(f"Invalid numeric environment variable: {exc}") from exc

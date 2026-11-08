@@ -16,6 +16,7 @@ from openneuro_pipeline.sources.openneuro import OpenNeuroClient
 from openneuro_pipeline.storage import LocalObjectStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
+DBT_PROJECT_DIR = Path(__file__).parent.parent / "transform"
 GRAPHQL_URL = "https://openneuro.test/crn/graphql"
 S3_URL = "https://s3.test/openneuro.org"
 
@@ -34,6 +35,7 @@ def settings(tmp_path: Path) -> Settings:
         request_timeout=5,
         max_workers=2,
         insert_batch_size=2,  # tiny, so batching is exercised by small fixtures
+        dbt_project_dir=DBT_PROJECT_DIR,
     )
 
 
@@ -92,3 +94,13 @@ def mocked_api() -> Iterator[responses.RequestsMock]:
         register_catalogue(rsps)
         register_participant_files(rsps)
         yield rsps
+
+
+def json_from_output(output: str) -> Any:
+    """Extract the JSON summary the CLI prints last, ignoring log lines before it.
+
+    The summary is the only text that starts at column 0 with "{" or "[".
+    """
+    lines = output.splitlines()
+    start = next(i for i, line in enumerate(lines) if line in ("{", "["))
+    return json.loads("\n".join(lines[start:]))

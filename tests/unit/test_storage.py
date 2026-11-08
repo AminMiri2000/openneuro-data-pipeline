@@ -1,4 +1,5 @@
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -74,3 +75,12 @@ def test_watermark_persists_only_on_flush(store):
 
     watermark.flush()
     assert WatermarkStore(store, "demo").get("ds1") == {"snapshot_tag": "1.0.0"}
+
+
+def test_relative_root_lists_keys(tmp_path, monkeypatch):
+    # Regression: a relative root (the default "data/raw") broke list_keys.
+    monkeypatch.chdir(tmp_path)
+    store = LocalObjectStore(Path("data") / "raw")
+    store.write_bytes("a/b.txt", b"x")
+    assert list(store.list_keys("a")) == ["a/b.txt"]
+    assert list(store.list_keys()) == ["a/b.txt"]

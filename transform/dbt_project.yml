@@ -1,0 +1,48 @@
+# dbt project: turns the raw OpenNeuro tables into tested, documented models.
+#
+# Layers (each only reads from the one before it):
+#   staging       1:1 with a source table; renamed, typed, lightly cleaned (views)
+#   intermediate  reusable building blocks, e.g. standardised attributes (views)
+#   marts         tables people query: one clear grain each (tables)
+
+name: openneuro
+version: "0.3.0"
+config-version: 2
+profile: openneuro
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+analysis-paths: ["analyses"]
+
+flags:
+  send_anonymous_usage_stats: false
+
+vars:
+  # Days of daily catalogue history re-processed by incremental models on each
+  # run. Covers same-day re-runs and short backfills; older backfills need
+  # `--full-refresh` (see docs/adr/0003).
+  incremental_lookback_days: 3
+  # Data-quality thresholds (warn-level tests in tests/data_quality/).
+  max_catalogue_drop: 0.10          # tolerated day-on-day drop in dataset count
+  min_standardisation_rate: 0.95    # share of provided demographic values standardised
+
+models:
+  openneuro:
+    +persist_docs:
+      relation: true
+      columns: true
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
+
+seeds:
+  openneuro:
+    +schema: reference

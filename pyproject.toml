@@ -4,16 +4,28 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openneuro-pipeline"
-version = "0.2.0"
-description = "Batch pipeline that ingests OpenNeuro dataset metadata into a local DuckDB warehouse."
+version = "0.3.0"
+description = "Batch pipeline that ingests OpenNeuro dataset metadata into DuckDB and models it with dbt."
 readme = "README.md"
-requires-python = ">=3.11"
+# Upper bound: dagster-dbt supports Python up to 3.13 (and dbt's own
+# dependencies lag new Python releases). Raise it once they support newer ones.
+requires-python = ">=3.11,<3.14"
 license = { text = "MIT" }
 authors = [{ name = "Mohammad" }]
 dependencies = [
     "requests>=2.31",
-    "duckdb>=1.1",
+    "duckdb>=1.3",  # 1.3 adds the `lambda x:` syntax used by the dbt models
+    "dbt-core>=1.10,<2",
+    "dbt-duckdb>=1.10,<2",
     "click>=8.1",
+    "python-dotenv>=1.0",
+    "dagster>=1.10,<2",
+    "dagster-webserver>=1.10,<2",
+    "dagster-dbt>=0.26,<1",
+    # dbt requires protobuf 6; grpcio-health-checking (via Dagster) moved to
+    # protobuf 7 in 1.81. Pinned until dbt supports protobuf 7.
+    "protobuf>=6.31,<7",
+    "grpcio-health-checking>=1.75,<1.81",
 ]
 
 [project.optional-dependencies]
@@ -32,6 +44,9 @@ openneuro-pipeline = "openneuro_pipeline.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"openneuro_pipeline.dashboard" = ["template.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -63,6 +78,12 @@ files = ["src"]
 [[tool.mypy.overrides]]
 module = ["responses.*"]
 ignore_missing_imports = true
+
+# Dagster checks asset return annotations at runtime by identity with the bare
+# class (`-> MaterializeResult`), so the generic form mypy wants cannot be used.
+[[tool.mypy.overrides]]
+module = ["openneuro_pipeline.orchestration.*"]
+disable_error_code = ["type-arg"]
 
 [tool.coverage.report]
 fail_under = 90

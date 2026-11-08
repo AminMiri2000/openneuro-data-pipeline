@@ -1,0 +1,87 @@
+version: 2
+
+# Lookup tables that drive attribute standardisation. Extending coverage for a
+# new spelling is a one-line CSV change, not a SQL change. Keys are compared
+# after `normalise_key()` (lower case, spaces/hyphens/underscores -> "_").
+
+seeds:
+  - name: participant_attribute_aliases
+    description: >
+      Maps participants.tsv column names to a standard attribute. When a
+      dataset has several columns for one attribute (e.g. both `sex` and
+      `gender`), the lowest `priority` with a usable value wins.
+    config:
+      column_types: {source_column_key: varchar, attribute: varchar, priority: integer}
+    columns:
+      - name: source_column_key
+        description: Normalised source column name.
+        data_tests: [unique, not_null]
+      - name: attribute
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [age, sex, handedness]
+      - name: priority
+        description: 1 = preferred source; higher numbers are fallbacks.
+        data_tests: [not_null]
+
+  - name: sex_values
+    description: >
+      Maps raw sex/gender values to `female`, `male` or `other`. A blank `sex`
+      marks a known "unknown" spelling, recorded as missing rather than
+      unmapped.
+    config:
+      # Forced to text: keys such as "1" are codes, not numbers.
+      column_types: {value_key: varchar, sex: varchar}
+    columns:
+      - name: value_key
+        data_tests: [unique, not_null]
+      - name: sex
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [female, male, other]
+
+  - name: handedness_values
+    description: Maps raw handedness values to `right`, `left` or `ambidextrous`.
+    config:
+      column_types: {value_key: varchar, handedness: varchar}
+    columns:
+      - name: value_key
+        data_tests: [unique, not_null]
+      - name: handedness
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [right, left, ambidextrous]
+
+  - name: attribute_value_patterns
+    description: >
+      Fallback for sex and handedness values with no exact match in the value
+      seeds: case-insensitive regular expressions on whole words, so
+      descriptive labels such as "Physiological female" or "Right handed
+      (LQ > 0)" are recognised. A value matching patterns for different
+      categories (e.g. both "left" and "right") is classed as `ambiguous`
+      rather than guessed. A blank `standard_value` marks a known "unknown"
+      phrase. `example` documents real values each pattern was written for.
+    config:
+      column_types: {attribute: varchar, pattern: varchar, standard_value: varchar, example: varchar}
+    data_tests:
+      - unique:
+          column_name: "attribute || '|' || pattern"
+    columns:
+      - name: attribute
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [sex, handedness]
+      - name: pattern
+        description: RE2 regular expression, matched case-insensitively.
+        data_tests: [not_null]
+      - name: standard_value
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [female, male, other, right, left, ambidextrous]
