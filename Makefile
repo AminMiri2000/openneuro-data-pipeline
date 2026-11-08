@@ -57,10 +57,10 @@ query:              ## read-only SQL on the warehouse: make query SQL="SELECT ..
 	$(PIPELINE) query "$(SQL)"
 
 docs:               ## generate the dbt documentation site (data/dbt/target)
-	$(PIPELINE) dbt docs generate
+	$(PIPELINE) docs
 
-docs-serve:         ## browse the dbt docs and lineage graph at http://localhost:8080
-	$(PIPELINE) dbt docs serve --port 8080
+docs-serve:         ## regenerate, then browse docs and lineage at http://localhost:8080
+	$(PIPELINE) docs --serve --port 8080
 
 freshness:          ## check the raw catalogue is recent (warn > 2 days, error > 7)
 	$(PIPELINE) dbt source freshness
