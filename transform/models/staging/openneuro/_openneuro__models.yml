@@ -1,0 +1,76 @@
+version: 2
+
+models:
+  - name: stg_openneuro__datasets
+    description: >
+      The daily catalogue, one row per dataset per ingest day and modality
+      filter, with the API payload unpacked into typed columns.
+    data_tests:
+      - unique:
+          column_name: "dataset_id || '|' || ingest_date || '|' || modality_filter"
+    columns:
+      - name: dataset_id
+        description: OpenNeuro accession number, e.g. `ds004395`.
+        data_tests: [not_null]
+      - name: ingest_date
+        description: Day the catalogue was extracted (partition date).
+        data_tests: [not_null]
+      - name: snapshot_tag
+        description: Latest published snapshot, e.g. `1.0.2`. NULL if never published.
+      - name: doi
+        description: Dataset DOI without any `doi:` or URL prefix.
+      - name: authors
+        description: List of author names.
+      - name: modalities
+        description: Lower-cased modalities in the latest snapshot.
+      - name: tasks
+        description: BIDS task labels in the latest snapshot.
+      - name: n_subjects
+        description: Number of subject folders in the latest snapshot.
+      - name: size_bytes
+        description: Total snapshot size in bytes.
+
+  - name: stg_openneuro__participants
+    description: >
+      Every line of every fetched participants.tsv. Columns other than
+      `participant_id` stay in `attributes` (JSON), because each dataset
+      defines its own.
+    columns:
+      - name: participant_row_key
+        description: "`dataset_id:snapshot_tag:row_number`, unique per line."
+        data_tests: [unique, not_null]
+      - name: participant_id
+        description: BIDS label such as `sub-01`; NULL if the column is missing.
+      - name: attributes
+        description: All other columns, raw text values, BIDS `n/a` already NULL.
+      - name: is_latest_snapshot
+        description: True for the most recently ingested snapshot of the dataset.
+
+  - name: stg_openneuro__participant_columns
+    description: The participants.json data dictionary, one row per documented column.
+    columns:
+      - name: column_key
+        description: Column name normalised for matching (see `normalise_key`).
+      - name: units
+        description: Declared units, e.g. `years` or `months`.
+      - name: levels
+        description: JSON object mapping coded values to labels, when declared.
+
+unit_tests:
+  - name: test_stg_datasets_normalises_doi_and_authors
+    description: DOI prefixes are stripped; a single-string author becomes a one-item list.
+    model: stg_openneuro__datasets
+    given:
+      - input: source('openneuro', 'openneuro_datasets')
+        rows:
+          - dataset_id: ds1
+            payload: '{"latestSnapshot": {"tag": "1.0.0", "description": {"DatasetDOI": "doi:10.18112/openneuro.ds1.v1.0.0", "Authors": ["A", "B"]}, "summary": {"modalities": ["EEG"], "subjects": ["01", "02"]}}}'
+          - dataset_id: ds2
+            payload: '{"latestSnapshot": {"tag": "2.0.0", "description": {"DatasetDOI": "https://doi.org/10.18112/openneuro.ds2.v2.0.0", "Authors": "Solo Author"}, "summary": {"subjects": []}}}'
+          - dataset_id: ds3
+            payload: '{"latestSnapshot": null}'
+    expect:
+      rows:
+        - {dataset_id: ds1, snapshot_tag: "1.0.0", doi: "10.18112/openneuro.ds1.v1.0.0", n_subjects: 2}
+        - {dataset_id: ds2, snapshot_tag: "2.0.0", doi: "10.18112/openneuro.ds2.v2.0.0", n_subjects: 0}
+        - {dataset_id: ds3, snapshot_tag: null, doi: null, n_subjects: null}

@@ -1,0 +1,10 @@
+# Connection settings. The pipeline sets PIPELINE_WAREHOUSE_PATH to the
+# absolute warehouse path before calling dbt, so this works from any folder.
+# The default lets you run dbt by hand from inside transform/.
+openneuro:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('PIPELINE_WAREHOUSE_PATH', '../data/warehouse.duckdb') }}"
+      threads: 4
