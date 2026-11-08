@@ -77,3 +77,25 @@ def test_transform_failure_gives_clean_exit(env):
     # No raw tables yet, so the staging models cannot build.
     result = CliRunner().invoke(main, ["transform"])
     assert result.exit_code == EXIT_ERROR
+
+
+def test_dagster_command_prepares_instance_and_launches(env, monkeypatch):
+    launched = {}
+
+    class FakeProcess:
+        def __init__(self, command, env):
+            launched["command"], launched["env"] = command, env
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr("openneuro_pipeline.cli.subprocess.Popen", FakeProcess)
+    result = CliRunner().invoke(main, ["dagster", "--port", "3333"])
+
+    assert result.exit_code == 0, result.output
+    command = launched["command"]
+    assert command[1:4] == ["-m", "dagster", "dev"]
+    assert "openneuro_pipeline.orchestration.definitions" in command
+    assert command[-2:] == ["--port", "3333"]
+    home = launched["env"]["DAGSTER_HOME"]
+    assert (env / "dagster" / "dagster.yaml").is_file() and home.endswith("dagster")
