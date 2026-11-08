@@ -55,3 +55,33 @@ seeds:
           - accepted_values:
               arguments:
                 values: [right, left, ambidextrous]
+
+  - name: attribute_value_patterns
+    description: >
+      Fallback for sex and handedness values with no exact match in the value
+      seeds: case-insensitive regular expressions on whole words, so
+      descriptive labels such as "Physiological female" or "Right handed
+      (LQ > 0)" are recognised. A value matching patterns for different
+      categories (e.g. both "left" and "right") is classed as `ambiguous`
+      rather than guessed. A blank `standard_value` marks a known "unknown"
+      phrase. `example` documents real values each pattern was written for.
+    config:
+      column_types: {attribute: varchar, pattern: varchar, standard_value: varchar, example: varchar}
+    data_tests:
+      - unique:
+          column_name: "attribute || '|' || pattern"
+    columns:
+      - name: attribute
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [sex, handedness]
+      - name: pattern
+        description: RE2 regular expression, matched case-insensitively.
+        data_tests: [not_null]
+      - name: standard_value
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [female, male, other, right, left, ambidextrous]

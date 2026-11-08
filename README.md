@@ -58,9 +58,12 @@ Participant tables are messy: the same field appears as `age`/`Age`,
 2. **Match** column names to standard attributes through a lookup seed.
 3. **Decode** numeric codes with the dataset's own data dictionary
    (`participants.json` `Levels`, e.g. `"2"` → `"Female"`).
-4. **Convert** to standard values, honouring declared units (age in months → years).
-5. **Classify** anything unusable (`unmapped`, `unparseable`, `out_of_range`)
-   instead of silently dropping it, so data quality can be measured.
+4. **Convert** to standard values, honouring declared units (age in months → years),
+   by exact lookup first, then by whole-word patterns for descriptive labels
+   such as "Physiological female" or "Right handed (LQ > 0)".
+5. **Classify** anything unusable (`unmapped`, `ambiguous`, `undocumented_numeric`,
+   `unparseable`, `out_of_range`) instead of silently dropping it, so data
+   quality can be measured.
 
 Extending coverage for a new spelling is a one-line CSV change in
 [`transform/seeds/`](transform/seeds), not a SQL change. Every model and column

@@ -28,27 +28,47 @@ models:
         description: Raw value translated through the sidecar `Levels`, if any.
       - name: was_decoded
         description: True when the sidecar `Levels` translated the value.
+      - name: match_method
+        description: >
+          How a sex/handedness value was recognised: `exact` (value seeds) or
+          `pattern` (word patterns in `attribute_value_patterns`). NULL for age
+          and for unrecognised values.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [exact, pattern]
       - name: standard_value
         description: >
           Age in years (as text, two decimals), or `female`/`male`/`other`, or
           `right`/`left`/`ambidextrous`. NULL unless `parse_status` is `ok`.
       - name: parse_status
         description: >
-          `ok`; `missing` (empty or a known "unknown" value); `unmapped`
-          (a sex/handedness value not in the lookup seeds); `unparseable`
-          (age not numeric); `out_of_range` (age outside 0-120 years).
+          `ok`; `missing` (empty or a known "unknown" value);
+          `unmapped` (text no seed or pattern recognises: add it to a seed);
+          `ambiguous` (text matching several categories, e.g. "left" and "right");
+          `undocumented_numeric` (a number such as sex "1" or handedness "0.88"
+          with no data dictionary; deliberately not guessed);
+          `unparseable` (age not numeric); `out_of_range` (age outside 0-120 years).
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: [ok, missing, unmapped, unparseable, out_of_range]
+                values:
+                  - ok
+                  - missing
+                  - unmapped
+                  - ambiguous
+                  - undocumented_numeric
+                  - unparseable
+                  - out_of_range
 
 unit_tests:
   - name: test_attribute_standardisation_edge_cases
     description: >
-      Real cases seen in OpenNeuro data: coded values decoded through the
-      sidecar, lower-case codes, ages in months, non-numeric and implausible
-      ages, codes without a dictionary, and unrelated columns.
+      Cases taken from real OpenNeuro data: coded values decoded through the
+      sidecar, lower-case codes, ages in months, descriptive labels matched by
+      pattern (including a typo), undocumented numeric codes, ambiguous text,
+      and unusable ages.
     model: int_participant_attribute_values
     given:
       - input: ref('stg_openneuro__participants')
@@ -76,7 +96,25 @@ unit_tests:
             snapshot_tag: "1"
             participant_id: sub-02
             is_latest_snapshot: true
-            attributes: '{"age": "150", "sex": "X"}'
+            attributes: '{"age": "150", "sex": "X", "handedness": "left and right"}'
+          - participant_row_key: "ds5:1:1"
+            dataset_id: ds5
+            snapshot_tag: "1"
+            participant_id: sub-01
+            is_latest_snapshot: true
+            attributes: '{"sex": "Physiological female", "handedness": "Rigth handed"}'
+          - participant_row_key: "ds5:1:2"
+            dataset_id: ds5
+            snapshot_tag: "1"
+            participant_id: sub-02
+            is_latest_snapshot: true
+            attributes: '{"sex": "prefer not to respond", "handedness": "Left handed (LQ <= 0)"}'
+          - participant_row_key: "ds5:1:3"
+            dataset_id: ds5
+            snapshot_tag: "1"
+            participant_id: sub-03
+            is_latest_snapshot: true
+            attributes: '{"sex": "Biological male", "handedness": "0.88"}'
           - participant_row_key: "ds4:old:1"
             dataset_id: ds4
             snapshot_tag: old
@@ -111,20 +149,37 @@ unit_tests:
           value_key,handedness
           right,right
           right_handed,right
+      - input: ref('attribute_value_patterns')
+        format: csv
+        rows: |
+          attribute,pattern,standard_value,example
+          sex,\b(female|woman)\b,female,
+          sex,\b(male|man)\b,male,
+          sex,\b(prefer not|none)\b,,
+          handedness,\b(right|rigth)\b,right,
+          handedness,\b(left)\b,left,
     expect:
       rows:
         # ds1: coded Gender decoded via Levels; Handedness "1" has no dictionary
-        - {participant_row_key: "ds1:1:1", attribute: age, standard_value: "23.0", parse_status: ok, was_decoded: false}
-        - {participant_row_key: "ds1:1:1", attribute: sex, standard_value: female, parse_status: ok, was_decoded: true}
-        - {participant_row_key: "ds1:1:1", attribute: handedness, standard_value: null, parse_status: unmapped, was_decoded: false}
+        - {participant_row_key: "ds1:1:1", attribute: age, standard_value: "23.0", parse_status: ok, match_method: null}
+        - {participant_row_key: "ds1:1:1", attribute: sex, standard_value: female, parse_status: ok, match_method: exact}
+        - {participant_row_key: "ds1:1:1", attribute: handedness, standard_value: null, parse_status: undocumented_numeric, match_method: null}
         # ds2: age declared in months; lower-case code; spelled-out handedness
-        - {participant_row_key: "ds2:1:1", attribute: age, standard_value: "2.5", parse_status: ok, was_decoded: false}
-        - {participant_row_key: "ds2:1:1", attribute: sex, standard_value: female, parse_status: ok, was_decoded: false}
-        - {participant_row_key: "ds2:1:1", attribute: handedness, standard_value: right, parse_status: ok, was_decoded: false}
+        - {participant_row_key: "ds2:1:1", attribute: age, standard_value: "2.5", parse_status: ok, match_method: null}
+        - {participant_row_key: "ds2:1:1", attribute: sex, standard_value: female, parse_status: ok, match_method: exact}
+        - {participant_row_key: "ds2:1:1", attribute: handedness, standard_value: right, parse_status: ok, match_method: exact}
         # ds3: unusable values are kept and classified, never silently dropped
-        - {participant_row_key: "ds3:1:1", attribute: age, standard_value: null, parse_status: unparseable, was_decoded: false}
-        - {participant_row_key: "ds3:1:1", attribute: sex, standard_value: null, parse_status: missing, was_decoded: false}
-        - {participant_row_key: "ds3:1:1", attribute: handedness, standard_value: null, parse_status: missing, was_decoded: false}
-        - {participant_row_key: "ds3:1:2", attribute: age, standard_value: null, parse_status: out_of_range, was_decoded: false}
-        - {participant_row_key: "ds3:1:2", attribute: sex, standard_value: null, parse_status: unmapped, was_decoded: false}
+        - {participant_row_key: "ds3:1:1", attribute: age, standard_value: null, parse_status: unparseable, match_method: null}
+        - {participant_row_key: "ds3:1:1", attribute: sex, standard_value: null, parse_status: missing, match_method: exact}
+        - {participant_row_key: "ds3:1:1", attribute: handedness, standard_value: null, parse_status: missing, match_method: null}
+        - {participant_row_key: "ds3:1:2", attribute: age, standard_value: null, parse_status: out_of_range, match_method: null}
+        - {participant_row_key: "ds3:1:2", attribute: sex, standard_value: null, parse_status: unmapped, match_method: null}
+        - {participant_row_key: "ds3:1:2", attribute: handedness, standard_value: null, parse_status: ambiguous, match_method: null}
+        # ds5: descriptive labels resolved by pattern, including a typo
+        - {participant_row_key: "ds5:1:1", attribute: sex, standard_value: female, parse_status: ok, match_method: pattern}
+        - {participant_row_key: "ds5:1:1", attribute: handedness, standard_value: right, parse_status: ok, match_method: pattern}
+        - {participant_row_key: "ds5:1:2", attribute: sex, standard_value: null, parse_status: missing, match_method: pattern}
+        - {participant_row_key: "ds5:1:2", attribute: handedness, standard_value: left, parse_status: ok, match_method: pattern}
+        - {participant_row_key: "ds5:1:3", attribute: sex, standard_value: male, parse_status: ok, match_method: pattern}
+        - {participant_row_key: "ds5:1:3", attribute: handedness, standard_value: null, parse_status: undocumented_numeric, match_method: null}
         # ds4 is an old snapshot and "Raven" is not a known attribute: no rows
