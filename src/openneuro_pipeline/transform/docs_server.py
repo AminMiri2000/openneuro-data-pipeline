@@ -40,13 +40,15 @@ class _LocalServer(ThreadingHTTPServer):
     daemon_threads = True  # do not wait for open browser connections on exit
 
 
-def make_server(site_dir: Path, port: int) -> _LocalServer:
-    """Create (but do not start) a localhost server for a generated docs site.
+def make_server(
+    site_dir: Path, port: int, required_files: tuple[str, ...] = REQUIRED_FILES
+) -> _LocalServer:
+    """Create (but do not start) a localhost server for a generated static site.
 
     Raises:
         TransformError: The site is incomplete, or the port is already in use.
     """
-    missing = [name for name in REQUIRED_FILES if not (site_dir / name).is_file()]
+    missing = [name for name in required_files if not (site_dir / name).is_file()]
     if missing:
         raise TransformError(f"Docs site in {site_dir} is incomplete (missing {missing})")
     handler = partial(_QuietHandler, directory=str(site_dir))
@@ -58,9 +60,14 @@ def make_server(site_dir: Path, port: int) -> _LocalServer:
         raise TransformError(f"Cannot serve docs on port {port}: {exc}") from exc
 
 
-def serve(site_dir: Path, port: int, open_browser: bool = True) -> None:
-    """Serve the docs until Ctrl+C, then shut down cleanly."""
-    server = make_server(site_dir, port)
+def serve(
+    site_dir: Path,
+    port: int,
+    open_browser: bool = True,
+    required_files: tuple[str, ...] = REQUIRED_FILES,
+) -> None:
+    """Serve a static site until Ctrl+C, then shut down cleanly."""
+    server = make_server(site_dir, port, required_files)
     url = f"http://localhost:{server.server_address[1]}"
     log.info("docs: serving %s at %s (Ctrl+C to stop)", site_dir, url)
     if open_browser:
