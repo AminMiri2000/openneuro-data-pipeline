@@ -1,0 +1,111 @@
+version: 2
+
+models:
+  - name: dim_dataset
+    description: >
+      One row per OpenNeuro dataset: latest catalogue metadata plus how
+      complete its participant demographics are. Start here to find datasets.
+    columns:
+      - name: dataset_id
+        description: OpenNeuro accession number.
+        data_tests: [unique, not_null]
+      - name: dataset_name
+        description: Title from dataset_description.json.
+      - name: openneuro_url
+        description: Link to the dataset page.
+      - name: doi
+        description: DOI without prefix.
+      - name: modalities
+        description: Lower-cased modalities in the latest snapshot.
+      - name: tasks
+        description: BIDS task labels in the latest snapshot.
+      - name: n_subjects
+        description: Subject folders in the latest snapshot.
+      - name: size_gb
+        description: Snapshot size in gigabytes (10^9 bytes).
+      - name: is_active
+        description: Present in the most recent catalogue extract.
+        data_tests: [not_null]
+      - name: has_participants_table
+        description: The dataset publishes a participants.tsv.
+        data_tests: [not_null]
+      - name: n_participant_rows
+        description: Lines in the latest participants.tsv (0 if none).
+      - name: participants_match_subjects
+        description: participants.tsv line count equals the subject folder count.
+      - name: pct_age_known
+        description: Share of participants with a usable age (0-1).
+        data_tests:
+          - value_between: {arguments: {min_value: 0, max_value: 1}}
+      - name: pct_sex_known
+        description: Share of participants with a usable sex (0-1).
+        data_tests:
+          - value_between: {arguments: {min_value: 0, max_value: 1}}
+      - name: pct_handedness_known
+        description: Share of participants with a usable handedness (0-1).
+        data_tests:
+          - value_between: {arguments: {min_value: 0, max_value: 1}}
+      - name: n_unusable_values
+        description: >
+          Values present in participants.tsv that could not be standardised;
+          see `int_participant_attribute_values.parse_status`.
+
+  - name: fct_participant
+    description: >
+      One row per participant in each dataset's latest snapshot, with
+      standardised demographics. Note that many datasets record gender in a
+      column named `sex` and vice versa; both feed `sex`, and
+      `sex_source_column` shows which one was used.
+    data_tests:
+      # Duplicate participant ids within a dataset are an upstream data issue
+      # worth seeing, not a reason to stop the pipeline.
+      - unique:
+          name: fct_participant_participant_id_unique_within_dataset
+          column_name: "dataset_id || '|' || participant_id"
+          config:
+            severity: warn
+            where: participant_id is not null
+    columns:
+      - name: participant_row_key
+        description: "`dataset_id:snapshot_tag:row_number`."
+        data_tests: [unique, not_null]
+      - name: dataset_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_dataset')
+                field: dataset_id
+      - name: participant_id
+        description: BIDS label such as `sub-01`; unique within a dataset (warn-only test above).
+      - name: age_years
+        description: Age in years, converted from the dataset's declared units.
+        data_tests:
+          - value_between: {arguments: {min_value: 0, max_value: 120}}
+      - name: sex
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [female, male, other]
+      - name: handedness
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [right, left, ambidextrous]
+      - name: n_unusable_values
+        description: Attribute values present but not standardisable.
+      - name: n_source_columns
+        description: Columns in participants.tsv besides participant_id.
+
+  - name: fct_dataset_daily
+    description: >
+      Daily history of each dataset's snapshot, subject count and size; one
+      row per dataset per ingest day. Incremental (see model header).
+    data_tests:
+      - unique:
+          column_name: "dataset_id || '|' || ingest_date"
+    columns:
+      - name: dataset_id
+        data_tests: [not_null]
+      - name: ingest_date
+        data_tests: [not_null]
