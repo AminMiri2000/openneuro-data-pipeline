@@ -25,8 +25,8 @@ CLEAN_TARGETS = ("data/raw", "data/dbt", "data/warehouse.duckdb", "data/warehous
 
 # Supported interpreter range; keep in sync with requires-python in pyproject.toml.
 MIN_PYTHON = (3, 11)
-MAX_PYTHON_EXCLUSIVE = (3, 15)
-SUPPORTED_TEXT = "3.11 to 3.14"
+MAX_PYTHON_EXCLUSIVE = (3, 14)
+SUPPORTED_TEXT = "3.11 to 3.13"
 
 VENV_DIR = ".venv"
 
