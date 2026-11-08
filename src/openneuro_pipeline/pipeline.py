@@ -1,4 +1,4 @@
-"""Pipeline facade: the single entry point for running extract and load steps.
+"""Pipeline facade: the single entry point for extract, load and transform.
 
 The CLI uses it today and the Dagster orchestrator will use it in phase 3, so
 neither has to know how clients, storage and extractors are wired together.
@@ -15,14 +15,16 @@ from .extract import ExtractParams, ExtractResult, RunContext, execution_order, 
 from .load import LoadResult, Warehouse
 from .sources.openneuro import OpenNeuroClient
 from .storage import LocalObjectStore, ObjectStore
+from .transform import DbtProject, TransformResult
 
 
 @dataclass
 class PipelineResult:
-    """Outcome of a full run: every extractor's result plus the load."""
+    """Outcome of a full run: every extractor's result, the load and the transform."""
 
     extracts: list[ExtractResult] = field(default_factory=list)
     load: LoadResult | None = None
+    transform: TransformResult | None = None
 
     @property
     def ok(self) -> bool:
@@ -43,6 +45,7 @@ class Pipeline:
         self.client = client or OpenNeuroClient(settings)
         self.store = store or LocalObjectStore(settings.raw_dir)
         self.warehouse = Warehouse(settings, self.store)
+        self.dbt = DbtProject(settings)
 
     def extract(
         self, names: Iterable[str] | None = None, params: ExtractParams | None = None
@@ -61,9 +64,24 @@ class Pipeline:
     def load(self, full_refresh: bool = False) -> LoadResult:
         return self.warehouse.load(full_refresh=full_refresh)
 
+    def transform(self, select: str | None = None, full_refresh: bool = False) -> TransformResult:
+        """Build the dbt models and run their tests."""
+        return self.dbt.build(select=select, full_refresh=full_refresh)
+
     def run(
-        self, params: ExtractParams | None = None, full_refresh: bool = False
+        self,
+        params: ExtractParams | None = None,
+        full_refresh: bool = False,
+        transform: bool = True,
     ) -> PipelineResult:
-        """Full batch: every extractor, then the warehouse load."""
-        extracts = self.extract(params=params)
-        return PipelineResult(extracts=extracts, load=self.load(full_refresh=full_refresh))
+        """Full batch: every extractor, then the warehouse load, then dbt.
+
+        `full_refresh` rebuilds both the raw tables and the incremental dbt
+        models, which is how a backfill older than the incremental look-back
+        window is applied.
+        """
+        result = PipelineResult(extracts=self.extract(params=params))
+        result.load = self.load(full_refresh=full_refresh)
+        if transform:
+            result.transform = self.transform(full_refresh=full_refresh)
+        return result
