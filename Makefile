@@ -22,12 +22,14 @@ endif
 PIPELINE := $(VENV_PYTHON) -m openneuro_pipeline.cli
 MODALITY ?= EEG
 
-.PHONY: help install check-api extract load run backfill query test lint typecheck format clean
+.PHONY: help install check-api extract load transform run backfill query docs docs-serve \
+        freshness test lint typecheck format clean clean-venv
 
 help:               ## list targets
 	@$(SYSTEM_PYTHON) scripts/dev.py help Makefile
 
 install:            ## create a virtualenv, install the project and git hooks
+	$(SYSTEM_PYTHON) scripts/dev.py check-python
 	$(SYSTEM_PYTHON) -m venv .venv
 	$(VENV_PYTHON) -m pip install --upgrade pip
 	$(VENV_PYTHON) -m pip install -e ".[dev]"
@@ -42,14 +44,26 @@ extract:            ## all extractors into data/raw (MODALITY=EEG by default)
 load:               ## load new or changed raw partitions into DuckDB
 	$(PIPELINE) load
 
-run:                ## full batch: extract + load
+transform:          ## build dbt models and run data tests
+	$(PIPELINE) transform
+
+run:                ## full batch: extract + load + transform
 	$(PIPELINE) run --modality $(MODALITY)
 
-backfill:           ## re-extract a given day: make backfill DATE=2026-11-01
-	$(PIPELINE) run --modality $(MODALITY) --ingest-date $(DATE)
+backfill:           ## re-extract a past day and rebuild: make backfill DATE=2026-11-01
+	$(PIPELINE) run --modality $(MODALITY) --ingest-date $(DATE) --full-refresh
 
 query:              ## read-only SQL on the warehouse: make query SQL="SELECT ..."
 	$(PIPELINE) query "$(SQL)"
+
+docs:               ## generate the dbt documentation site (data/dbt/target)
+	$(PIPELINE) dbt docs generate
+
+docs-serve:         ## browse the dbt docs and lineage graph at http://localhost:8080
+	$(PIPELINE) dbt docs serve --port 8080
+
+freshness:          ## check the raw catalogue is recent (warn > 2 days, error > 7)
+	$(PIPELINE) dbt source freshness
 
 test:               ## tests with coverage gate
 	$(VENV_PYTHON) -m pytest --cov=openneuro_pipeline --cov-report=term-missing
@@ -67,3 +81,6 @@ format:             ## auto-format and auto-fix lint
 
 clean:              ## delete local data and warehouse (raw files are re-downloadable)
 	$(SYSTEM_PYTHON) scripts/dev.py clean
+
+clean-venv:         ## delete the virtualenv (e.g. to switch Python version)
+	$(SYSTEM_PYTHON) scripts/dev.py clean-venv
