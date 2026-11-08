@@ -1,0 +1,86 @@
+{
+  "data": {
+    "datasets": {
+      "edges": [
+        {
+          "node": {
+            "id": "ds000001",
+            "created": "2024-01-01T10:00:00.000Z",
+            "latestSnapshot": {
+              "id": "ds000001:1.0.2",
+              "tag": "1.0.2",
+              "created": "2024-02-01T10:00:00.000Z",
+              "description": {
+                "Name": "Test EEG dataset 1",
+                "Authors": [
+                  "A. Author",
+                  "B. Author"
+                ],
+                "License": "CC0",
+                "DatasetDOI": "doi:10.18112/openneuro.ds000001.v1.0.2",
+                "BIDSVersion": "1.8.0"
+              },
+              "summary": {
+                "modalities": [
+                  "EEG"
+                ],
+                "subjects": [
+                  "01",
+                  "02",
+                  "03"
+                ],
+                "sessions": [],
+                "tasks": [
+                  "oddball"
+                ],
+                "size": 123456789,
+                "totalFiles": 42
+              }
+            }
+          }
+        },
+        {
+          "node": {
+            "id": "ds000002",
+            "created": "2024-01-02T10:00:00.000Z",
+            "latestSnapshot": {
+              "id": "ds000002:1.0.0",
+              "tag": "1.0.0",
+              "created": "2024-02-02T10:00:00.000Z",
+              "description": {
+                "Name": "Test EEG dataset 2",
+                "Authors": [
+                  "A. Author",
+                  "B. Author"
+                ],
+                "License": "CC0",
+                "DatasetDOI": "doi:10.18112/openneuro.ds000002.v1.0.0",
+                "BIDSVersion": "1.8.0"
+              },
+              "summary": {
+                "modalities": [
+                  "EEG"
+                ],
+                "subjects": [
+                  "01",
+                  "02",
+                  "03"
+                ],
+                "sessions": [],
+                "tasks": [
+                  "oddball"
+                ],
+                "size": 123456789,
+                "totalFiles": 42
+              }
+            }
+          }
+        }
+      ],
+      "pageInfo": {
+        "hasNextPage": true,
+        "endCursor": "cursor-2"
+      }
+    }
+  }
+}
