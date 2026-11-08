@@ -26,7 +26,10 @@ class LocalObjectStore:
     """
 
     def __init__(self, root: Path) -> None:
-        self.root = Path(root)
+        # Resolve once, up front: every key is computed relative to an absolute
+        # root, so a relative setting such as "data/raw" behaves the same as an
+        # absolute one regardless of how paths are later resolved.
+        self.root = Path(root).resolve()
 
     # ------------------------------------------------------------------ writing
 
@@ -84,6 +87,6 @@ class LocalObjectStore:
     def _path(self, key: str) -> Path:
         """Resolve a key to a path, refusing keys that escape the root."""
         path = (self.root / key).resolve()
-        if not path.is_relative_to(self.root.resolve()):
+        if not path.is_relative_to(self.root):
             raise StorageError(f"Key escapes the store root: {key}")
         return path
