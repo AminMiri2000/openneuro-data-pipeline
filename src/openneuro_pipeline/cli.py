@@ -10,6 +10,8 @@ Exit codes: 0 success, 1 some items failed (the rest were kept),
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from dataclasses import asdict
 from datetime import date
@@ -58,7 +60,9 @@ _limit = click.option("--limit", type=int, help="Cap items processed, for quick 
 _ingest_date = click.option(
     "--ingest-date",
     type=click.DateTime(formats=["%Y-%m-%d"]),
-    help="Partition date to write (default: today, UTC). Used for backfills.",
+    # OpenNeuro only serves its current state, so this cannot recover a past
+    # day's catalogue; it only labels the partition being written.
+    help="Partition label to write (default: today, UTC). Does not fetch past data.",
 )
 _full_refresh = click.option(
     "--full-refresh", is_flag=True, help="Drop raw tables and rebuild from raw files."
@@ -160,6 +164,41 @@ def docs_cmd(pipeline: Pipeline, serve: bool, port: int, no_browser: bool) -> No
         serve_docs(site_dir, port, open_browser=not no_browser)
     else:
         click.echo(f"Docs generated in {site_dir}")
+
+
+@main.command("dagster")
+@click.option("--port", type=int, default=3000, show_default=True, help="Port for the Dagster UI.")
+@click.pass_obj
+def dagster_cmd(pipeline: Pipeline, port: int) -> None:
+    """Start Dagster locally: UI, schedules and run queue (Ctrl+C to stop).
+
+    Runs `dagster dev` with this project's definitions and a Dagster home
+    folder under the data directory, configured to run one job at a time.
+    """
+    # Imported here: Dagster is only needed by this command.
+    from .orchestration.instance import prepare_instance
+
+    settings = pipeline.settings
+    env = {
+        **os.environ,
+        "DAGSTER_HOME": str(prepare_instance(settings)),
+        # Absolute paths, so Dagster's worker processes agree with this one.
+        "PIPELINE_DATA_DIR": str(settings.data_dir.resolve()),
+        "PIPELINE_DBT_PROJECT_DIR": str(settings.dbt_project_dir.resolve()),
+    }
+    command = [
+        sys.executable, "-m", "dagster", "dev",
+        "-m", "openneuro_pipeline.orchestration.definitions",
+        "--host", "127.0.0.1", "--port", str(port),
+    ]  # fmt: skip
+    click.echo(f"Starting Dagster at http://localhost:{port} (Ctrl+C to stop)")
+    process = subprocess.Popen(command, env=env)
+    try:
+        sys.exit(process.wait())
+    except KeyboardInterrupt:
+        # Ctrl+C reaches Dagster too; give it time to stop its processes cleanly.
+        process.wait()
+        click.echo("Dagster stopped.")
 
 
 @main.command(
