@@ -1,0 +1,101 @@
+name: Daily refresh
+
+# Refreshes the warehouse from OpenNeuro every day and publishes the dashboard
+# (with the dbt docs) to GitHub Pages. Free on a public repository.
+#
+# Raw files are carried between runs in the Actions cache, so participant
+# downloads stay incremental; the DuckDB warehouse is rebuilt from them each
+# run (seconds), so nothing but raw data needs to persist.
+
+on:
+  schedule:
+    # 10:41 UTC = 05:41 Toronto in winter, 06:41 in summer. Off the hour,
+    # when GitHub's scheduler is least congested.
+    - cron: "41 10 * * *"
+  workflow_dispatch:
+  # Runs the refresh (not the deploy) when this file changes in a pull
+  # request, so the real OpenNeuro API is exercised before merging.
+  pull_request:
+    paths: [".github/workflows/refresh.yml"]
+
+permissions:
+  contents: read
+
+# Never run two refreshes at once: the second waits.
+concurrency:
+  group: daily-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ALERT_SOURCE_NAME: GitHub Actions daily refresh
+      # Repository secrets (Settings > Secrets and variables > Actions).
+      # Without them the digest is printed in the log instead of emailed.
+      ALERT_SMTP_USER: ${{ secrets.ALERT_SMTP_USER }}
+      ALERT_SMTP_PASSWORD: ${{ secrets.ALERT_SMTP_PASSWORD }}
+      ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Restore raw data from the previous run
+        uses: actions/cache/restore@v4
+        with:
+          path: data/raw
+          key: raw-data-${{ github.run_id }}
+          restore-keys: raw-data-
+
+      - name: Extract, load, transform
+        run: |
+          set +e
+          openneuro-pipeline run --notify
+          code=$?
+          set -e
+          # 1 = some datasets failed and will be retried next run (already
+          # emailed); still publish everything that worked. 2 = hard failure.
+          if [ "$code" -eq 1 ]; then
+            echo "::warning::Some participant downloads failed; they are retried on the next run."
+          elif [ "$code" -ne 0 ]; then
+            exit "$code"
+          fi
+
+      - name: Save raw data for the next run
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/cache/save@v4
+        with:
+          path: data/raw
+          key: raw-data-${{ github.run_id }}
+
+      - name: Build dashboard and dbt docs
+        run: openneuro-pipeline dashboard --with-docs --output site
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: refresh
+    # Publish only from the default branch, never from pull requests.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
