@@ -37,11 +37,13 @@ class TransformResult:
         command: The dbt command run, e.g. "build".
         status_counts: Nodes per final status ("success", "pass", "warn", ...).
         warnings: Names of nodes that ended in "warn", e.g. warn-only tests.
+        warning_details: "name: dbt message" for each warning, for alerts.
     """
 
     command: str
     status_counts: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    warning_details: list[str] = field(default_factory=list)
 
 
 @contextmanager
@@ -154,6 +156,8 @@ class DbtProject:
             status = str(node_result.status).lower()
             statuses[status] += 1
             if status == "warn":
-                result.warnings.append(node_result.node.name)
+                name = node_result.node.name
+                result.warnings.append(name)
+                result.warning_details.append(f"{name}: {node_result.message or 'warning'}")
         result.status_counts = dict(statuses)
         return result
