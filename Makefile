@@ -22,7 +22,7 @@ endif
 PIPELINE := $(VENV_PYTHON) -m openneuro_pipeline.cli
 MODALITY ?= EEG
 
-.PHONY: help install check-api extract load transform run rebuild dagster query docs \
+.PHONY: help install check-api extract load transform run rebuild dagster query dashboard docs \
         docs-serve freshness test lint typecheck format clean clean-venv
 
 help:               ## list targets
@@ -59,6 +59,9 @@ dagster:            ## Dagster UI, daily schedule and run queue at http://localh
 
 query:              ## read-only SQL on the warehouse: make query SQL="SELECT ..."
 	$(PIPELINE) query "$(SQL)"
+
+dashboard:          ## build the dashboard (+ dbt docs) and preview at http://localhost:8081
+	$(PIPELINE) dashboard --with-docs --serve
 
 docs:               ## generate the dbt documentation site (data/dbt/target)
 	$(PIPELINE) docs
