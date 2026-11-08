@@ -45,3 +45,20 @@ jobs:
       - run: pip install -e ".[dev]"
       - name: Test (fails under 90% coverage)
         run: pytest --cov=openneuro_pipeline --cov-report=term-missing
+
+  windows:
+    name: Windows (make install + make test)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      # Runs the Makefile exactly as a Windows user would, in cmd.exe.
+      - name: Install via make
+        shell: cmd
+        run: make install
+      - name: Test via make
+        shell: cmd
+        run: make test

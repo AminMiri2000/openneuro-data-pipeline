@@ -16,6 +16,7 @@ from datetime import date
 from typing import Any
 
 import click
+import duckdb
 
 from .config import Settings
 from .errors import PipelineError
@@ -113,6 +114,25 @@ def extract_cmd(
 def load_cmd(pipeline: Pipeline, full_refresh: bool) -> None:
     """Load new or changed raw partitions into DuckDB."""
     _echo_json(asdict(pipeline.load(full_refresh=full_refresh)))
+
+
+@main.command("query")
+@click.argument("sql")
+@click.pass_obj
+def query_cmd(pipeline: Pipeline, sql: str) -> None:
+    """Run a read-only SQL query against the warehouse and print the result.
+
+    Opened read-only, so a query can never modify loaded data.
+    """
+    if not pipeline.settings.warehouse_path.exists():
+        click.echo("error: no warehouse yet; run `make run` first", err=True)
+        sys.exit(EXIT_ERROR)
+    try:
+        with pipeline.warehouse.connect(read_only=True) as con:
+            click.echo(str(con.sql(sql)))
+    except duckdb.Error as exc:  # bad SQL or an attempted write: a message, not a traceback
+        click.echo(f"query error: {exc}", err=True)
+        sys.exit(EXIT_ERROR)
 
 
 @main.command("run")

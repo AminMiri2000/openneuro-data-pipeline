@@ -60,7 +60,9 @@ More detail: [architecture and scalability](docs/architecture.md),
 
 ## Quick start
 
-Requires Python 3.11+.
+Requires Python 3.11+ and GNU make. Works on Windows (PowerShell or cmd),
+macOS and Linux. On Windows, install make with `winget install GnuWin32.Make`
+or `choco install make`.
 
 ```bash
 make install       # virtualenv, dependencies, git hooks
@@ -69,16 +71,16 @@ make run           # extract EEG catalogue + participant tables, load into DuckD
 make help          # every other target (backfill, load, test, ...)
 ```
 
-Then query it:
+Then query the warehouse (read-only):
 
 ```bash
-.venv/bin/python -c "import duckdb; print(duckdb.connect('data/warehouse.duckdb').sql('''
-  SELECT dataset_id,
-         payload->'latestSnapshot'->'description'->>'Name' AS name,
-         json_array_length(payload->'latestSnapshot'->'summary'->'subjects') AS n_subjects
-  FROM raw.openneuro_datasets
-  ORDER BY n_subjects DESC LIMIT 10'''))"
+make query SQL="SELECT dataset_id, payload->'latestSnapshot'->'description'->>'Name' AS name FROM raw.openneuro_datasets LIMIT 10"
 ```
+
+To run the CLI directly, activate the virtualenv first
+(`.venv\Scripts\Activate.ps1` on Windows, `source .venv/bin/activate` elsewhere),
+then use `openneuro-pipeline --help`. Activating it also lets the git hooks
+find their tools when you commit.
 
 Useful options: `--modality MEG|MRI|iEEG|all`, `--limit 20` for a quick trial,
 `--ingest-date 2026-11-01` to backfill a day, `load --full-refresh` to rebuild.

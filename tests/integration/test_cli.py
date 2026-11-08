@@ -45,3 +45,19 @@ def test_config_error_gives_clean_exit(env, monkeypatch):
     monkeypatch.setenv("PIPELINE_MAX_WORKERS", "0")
     result = CliRunner().invoke(main, ["load"])
     assert result.exit_code == EXIT_ERROR
+
+
+def test_query_reads_warehouse(env, mocked_api):
+    runner = CliRunner()
+    assert runner.invoke(main, ["run"]).exit_code == 0
+    result = runner.invoke(main, ["query", "SELECT count(*) AS n FROM raw.openneuro_datasets"])
+    assert result.exit_code == 0, result.output
+    assert "4" in result.output
+
+
+def test_query_cannot_modify_data(env, mocked_api):
+    runner = CliRunner()
+    runner.invoke(main, ["run"])
+    result = runner.invoke(main, ["query", "DELETE FROM raw.openneuro_datasets"])
+    assert result.exit_code == EXIT_ERROR  # read-only connection rejects writes
+    assert "query error" in result.output
