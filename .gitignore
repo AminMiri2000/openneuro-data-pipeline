@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local data (raw files, DuckDB warehouse, pipeline state) never goes in git
+data/*
+!data/.gitkeep
+*.duckdb
+*.duckdb.wal
+
+# dbt / Dagster local artifacts (later phases)
+target/
+dbt_packages/
+logs/
+.dagster/
+tmp*/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+.env
