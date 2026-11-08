@@ -4,7 +4,7 @@ Deliberately thin: it parses options, calls `Pipeline`, prints a JSON summary
 and sets the exit code. No business logic lives here.
 
 Exit codes: 0 success, 1 some items failed (the rest were kept),
-2 the run could not complete (configuration, source or storage error).
+2 the run could not complete (configuration, source, storage or dbt error).
 """
 
 from __future__ import annotations
@@ -135,22 +135,55 @@ def query_cmd(pipeline: Pipeline, sql: str) -> None:
         sys.exit(EXIT_ERROR)
 
 
+@main.command("transform")
+@click.option("--select", help="dbt node selection, e.g. 'marts' or 'dim_dataset+'.")
+@click.option("--full-refresh", is_flag=True, help="Rebuild incremental models from scratch.")
+@click.pass_obj
+def transform_cmd(pipeline: Pipeline, select: str | None, full_refresh: bool) -> None:
+    """Build the dbt models and run their tests (`dbt build`)."""
+    _echo_json(asdict(pipeline.transform(select=select, full_refresh=full_refresh)))
+
+
+@main.command(
+    "dbt",
+    context_settings={"ignore_unknown_options": True, "help_option_names": []},
+)
+@click.argument("dbt_args", nargs=-1, type=click.UNPROCESSED)
+@click.pass_obj
+def dbt_cmd(pipeline: Pipeline, dbt_args: tuple[str, ...]) -> None:
+    """Run any dbt command against this project, e.g. `dbt docs generate`.
+
+    Project, profile, warehouse and output paths are filled in automatically,
+    so this works the same on every OS without activating anything.
+    """
+    if not dbt_args:
+        dbt_args = ("--help",)
+    pipeline.dbt.invoke(list(dbt_args))
+
+
 @main.command("run")
 @_modality
 @_limit
 @_ingest_date
 @_full_refresh
+@click.option("--skip-transform", is_flag=True, help="Stop after loading; do not run dbt.")
 @click.pass_obj
 def run_cmd(
-    pipeline: Pipeline, modality: str, limit: int | None, ingest_date: Any, full_refresh: bool
+    pipeline: Pipeline,
+    modality: str,
+    limit: int | None,
+    ingest_date: Any,
+    full_refresh: bool,
+    skip_transform: bool,
 ) -> None:
-    """Full batch: all extractors, then load."""
+    """Full batch: all extractors, then load, then dbt build."""
     params = _build_params(modality, limit, ingest_date.date() if ingest_date else None)
-    result = pipeline.run(params, full_refresh=full_refresh)
+    result = pipeline.run(params, full_refresh=full_refresh, transform=not skip_transform)
     _echo_json(
         {
             "extracts": [asdict(r) for r in result.extracts],
             "load": asdict(result.load) if result.load else None,
+            "transform": asdict(result.transform) if result.transform else None,
         }
     )
     _exit_for(result.extracts)

@@ -1,0 +1,28 @@
+version: 2
+
+sources:
+  - name: openneuro
+    description: Raw tables written by the Python loader (`openneuro-pipeline load`).
+    schema: raw
+    tables:
+      - name: openneuro_datasets
+        description: One row per dataset per ingest day; `payload` is the API node as returned.
+        # Alert if the daily catalogue extract stops arriving.
+        loaded_at_field: ingested_at
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 7, period: day}
+        columns:
+          - name: dataset_id
+            data_tests: [not_null]
+          - name: payload
+            data_tests: [not_null]
+
+      - name: openneuro_participants
+        description: One row per line of a dataset's participants.tsv, extra columns kept as JSON.
+        columns:
+          - name: dataset_id
+            data_tests: [not_null]
+
+      - name: openneuro_participant_columns
+        description: One row per column documented in a dataset's participants.json sidecar.

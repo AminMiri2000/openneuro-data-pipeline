@@ -4,15 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openneuro-pipeline"
-version = "0.2.0"
-description = "Batch pipeline that ingests OpenNeuro dataset metadata into a local DuckDB warehouse."
+version = "0.3.0"
+description = "Batch pipeline that ingests OpenNeuro dataset metadata into DuckDB and models it with dbt."
 readme = "README.md"
-requires-python = ">=3.11"
+# Upper bound: dbt's dependencies (e.g. PyYAML) publish wheels for a new
+# Python only some months after its release. Raise it once they do.
+requires-python = ">=3.11,<3.15"
 license = { text = "MIT" }
 authors = [{ name = "Mohammad" }]
 dependencies = [
     "requests>=2.31",
-    "duckdb>=1.1",
+    "duckdb>=1.3",  # 1.3 adds the `lambda x:` syntax used by the dbt models
+    "dbt-core>=1.10,<2",
+    "dbt-duckdb>=1.10,<2",
     "click>=8.1",
 ]
 

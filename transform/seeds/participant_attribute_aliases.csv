@@ -1,0 +1,15 @@
+source_column_key,attribute,priority
+age,age,1
+age_years,age,1
+age_at_recording,age,1
+age_at_scan,age,1
+subject_age,age,1
+participant_age,age,1
+sex,sex,1
+biological_sex,sex,1
+sex_at_birth,sex,1
+gender,sex,2
+handedness,handedness,1
+hand,handedness,1
+handed,handedness,1
+dominant_hand,handedness,1

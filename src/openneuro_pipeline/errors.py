@@ -20,3 +20,7 @@ class SourceError(PipelineError):
 
 class StorageError(PipelineError):
     """A raw-layer object is missing or unreadable."""
+
+
+class TransformError(PipelineError):
+    """dbt could not build the models or a blocking data test failed."""
