@@ -1,0 +1,130 @@
+version: 2
+
+models:
+  - name: int_participant_attribute_values
+    description: >
+      Age, sex and handedness values from every participants.tsv, mapped to
+      standard attributes and values, one row per participant per source
+      column. Unrecognised columns are dropped; unrecognised values are kept
+      with a `parse_status` explaining why they could not be standardised.
+    data_tests:
+      - unique:
+          column_name: "participant_row_key || '|' || source_column"
+    columns:
+      - name: attribute
+        description: Standard attribute name.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [age, sex, handedness]
+      - name: priority
+        description: From the aliases seed; lower wins when columns compete.
+      - name: source_column
+        description: Column name exactly as it appears in participants.tsv.
+      - name: raw_value
+        description: Value as written in participants.tsv.
+      - name: decoded_value
+        description: Raw value translated through the sidecar `Levels`, if any.
+      - name: was_decoded
+        description: True when the sidecar `Levels` translated the value.
+      - name: standard_value
+        description: >
+          Age in years (as text, two decimals), or `female`/`male`/`other`, or
+          `right`/`left`/`ambidextrous`. NULL unless `parse_status` is `ok`.
+      - name: parse_status
+        description: >
+          `ok`; `missing` (empty or a known "unknown" value); `unmapped`
+          (a sex/handedness value not in the lookup seeds); `unparseable`
+          (age not numeric); `out_of_range` (age outside 0-120 years).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [ok, missing, unmapped, unparseable, out_of_range]
+
+unit_tests:
+  - name: test_attribute_standardisation_edge_cases
+    description: >
+      Real cases seen in OpenNeuro data: coded values decoded through the
+      sidecar, lower-case codes, ages in months, non-numeric and implausible
+      ages, codes without a dictionary, and unrelated columns.
+    model: int_participant_attribute_values
+    given:
+      - input: ref('stg_openneuro__participants')
+        rows:
+          - participant_row_key: "ds1:1:1"
+            dataset_id: ds1
+            snapshot_tag: "1"
+            participant_id: sub-01
+            is_latest_snapshot: true
+            attributes: '{"Age": "23", "Gender": "2", "Handedness": "1", "Raven": "48"}'
+          - participant_row_key: "ds2:1:1"
+            dataset_id: ds2
+            snapshot_tag: "1"
+            participant_id: sub-01
+            is_latest_snapshot: true
+            attributes: '{"age": "30", "sex": "f", "hand": "Right-Handed"}'
+          - participant_row_key: "ds3:1:1"
+            dataset_id: ds3
+            snapshot_tag: "1"
+            participant_id: sub-01
+            is_latest_snapshot: true
+            attributes: '{"age": "twenty", "sex": "U", "handedness": null}'
+          - participant_row_key: "ds3:1:2"
+            dataset_id: ds3
+            snapshot_tag: "1"
+            participant_id: sub-02
+            is_latest_snapshot: true
+            attributes: '{"age": "150", "sex": "X"}'
+          - participant_row_key: "ds4:old:1"
+            dataset_id: ds4
+            snapshot_tag: old
+            participant_id: sub-01
+            is_latest_snapshot: false
+            attributes: '{"age": "40"}'
+      - input: ref('stg_openneuro__participant_columns')
+        rows:
+          - {dataset_id: ds1, snapshot_tag: "1", column_name: Gender, column_key: gender, units: null, levels: '{"1": "Male", "2": "Female"}'}
+          - {dataset_id: ds2, snapshot_tag: "1", column_name: age, column_key: age, units: months, levels: null}
+      - input: ref('participant_attribute_aliases')
+        format: csv
+        rows: |
+          source_column_key,attribute,priority
+          age,age,1
+          sex,sex,1
+          gender,sex,2
+          hand,handedness,1
+          handedness,handedness,1
+      - input: ref('sex_values')
+        format: csv
+        rows: |
+          value_key,sex
+          f,female
+          female,female
+          m,male
+          male,male
+          u,
+      - input: ref('handedness_values')
+        format: csv
+        rows: |
+          value_key,handedness
+          right,right
+          right_handed,right
+    expect:
+      rows:
+        # ds1: coded Gender decoded via Levels; Handedness "1" has no dictionary
+        - {participant_row_key: "ds1:1:1", attribute: age, standard_value: "23.0", parse_status: ok, was_decoded: false}
+        - {participant_row_key: "ds1:1:1", attribute: sex, standard_value: female, parse_status: ok, was_decoded: true}
+        - {participant_row_key: "ds1:1:1", attribute: handedness, standard_value: null, parse_status: unmapped, was_decoded: false}
+        # ds2: age declared in months; lower-case code; spelled-out handedness
+        - {participant_row_key: "ds2:1:1", attribute: age, standard_value: "2.5", parse_status: ok, was_decoded: false}
+        - {participant_row_key: "ds2:1:1", attribute: sex, standard_value: female, parse_status: ok, was_decoded: false}
+        - {participant_row_key: "ds2:1:1", attribute: handedness, standard_value: right, parse_status: ok, was_decoded: false}
+        # ds3: unusable values are kept and classified, never silently dropped
+        - {participant_row_key: "ds3:1:1", attribute: age, standard_value: null, parse_status: unparseable, was_decoded: false}
+        - {participant_row_key: "ds3:1:1", attribute: sex, standard_value: null, parse_status: missing, was_decoded: false}
+        - {participant_row_key: "ds3:1:1", attribute: handedness, standard_value: null, parse_status: missing, was_decoded: false}
+        - {participant_row_key: "ds3:1:2", attribute: age, standard_value: null, parse_status: out_of_range, was_decoded: false}
+        - {participant_row_key: "ds3:1:2", attribute: sex, standard_value: null, parse_status: unmapped, was_decoded: false}
+        # ds4 is an old snapshot and "Raven" is not a known attribute: no rows
