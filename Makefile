@@ -1,14 +1,37 @@
-.PHONY: help install check-api extract load run backfill test lint typecheck format clean
+# Cross-platform Makefile: works with GNU make on Windows (cmd/PowerShell),
+# macOS and Linux.
+#
+# Portability rules used below:
+#   * Every tool runs as `<venv python> -m <module>`, never as a console script,
+#     because the venv's executables live in .venv/Scripts on Windows but
+#     .venv/bin elsewhere.
+#   * On Windows, make may run recipes through cmd.exe (which rejects unquoted
+#     forward-slash paths) or through Git's bash (which strips backslashes).
+#     A quoted forward-slash path works in both.
+#   * No Unix-only commands (rm, grep, awk): file and text work is done in
+#     Python, via scripts/dev.py.
 
-PIPELINE := .venv/bin/openneuro-pipeline
+ifeq ($(OS),Windows_NT)
+    SYSTEM_PYTHON ?= python
+    VENV_PYTHON := ".venv/Scripts/python.exe"
+else
+    SYSTEM_PYTHON ?= python3
+    VENV_PYTHON := .venv/bin/python
+endif
+
+PIPELINE := $(VENV_PYTHON) -m openneuro_pipeline.cli
 MODALITY ?= EEG
 
+.PHONY: help install check-api extract load run backfill query test lint typecheck format clean
+
 help:               ## list targets
-	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-11s %s\n", $$1, $$2}'
+	@$(SYSTEM_PYTHON) scripts/dev.py help Makefile
 
 install:            ## create a virtualenv, install the project and git hooks
-	python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-	.venv/bin/pre-commit install
+	$(SYSTEM_PYTHON) -m venv .venv
+	$(VENV_PYTHON) -m pip install --upgrade pip
+	$(VENV_PYTHON) -m pip install -e ".[dev]"
+	$(VENV_PYTHON) -m pre_commit install
 
 check-api:          ## confirm the OpenNeuro API answers our query
 	$(PIPELINE) check-api
@@ -25,17 +48,22 @@ run:                ## full batch: extract + load
 backfill:           ## re-extract a given day: make backfill DATE=2026-11-01
 	$(PIPELINE) run --modality $(MODALITY) --ingest-date $(DATE)
 
+query:              ## read-only SQL on the warehouse: make query SQL="SELECT ..."
+	$(PIPELINE) query "$(SQL)"
+
 test:               ## tests with coverage gate
-	.venv/bin/pytest --cov=openneuro_pipeline --cov-report=term-missing
+	$(VENV_PYTHON) -m pytest --cov=openneuro_pipeline --cov-report=term-missing
 
 lint:               ## lint and format check
-	.venv/bin/ruff check . && .venv/bin/ruff format --check .
+	$(VENV_PYTHON) -m ruff check .
+	$(VENV_PYTHON) -m ruff format --check .
 
 typecheck:          ## mypy strict
-	.venv/bin/mypy
+	$(VENV_PYTHON) -m mypy
 
 format:             ## auto-format and auto-fix lint
-	.venv/bin/ruff format . && .venv/bin/ruff check --fix .
+	$(VENV_PYTHON) -m ruff format .
+	$(VENV_PYTHON) -m ruff check --fix .
 
 clean:              ## delete local data and warehouse (raw files are re-downloadable)
-	rm -rf data/raw data/warehouse.duckdb
+	$(SYSTEM_PYTHON) scripts/dev.py clean
