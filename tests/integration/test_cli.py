@@ -99,3 +99,69 @@ def test_dagster_command_prepares_instance_and_launches(env, monkeypatch):
     assert command[-2:] == ["--port", "3333"]
     home = launched["env"]["DAGSTER_HOME"]
     assert (env / "dagster" / "dagster.yaml").is_file() and home.endswith("dagster")
+
+
+@pytest.fixture
+def captured_alerts(monkeypatch):
+    sent = []
+    monkeypatch.setattr("openneuro_pipeline.cli.send_digest", lambda d, s: sent.append(d) or True)
+    for name in ("ALERT_SMTP_USER", "ALERT_SMTP_PASSWORD", "GITHUB_RUN_ID"):
+        monkeypatch.delenv(name, raising=False)
+    return sent
+
+
+def test_notify_sends_digest_for_failed_items(env, captured_alerts, monkeypatch):
+    import responses as rsps_lib
+
+    from tests.conftest import register_catalogue
+
+    monkeypatch.setenv("ALERT_SOURCE_NAME", "Test refresh")
+    with rsps_lib.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        register_catalogue(rsps)
+        for ds in ("ds000001", "ds000002", "ds000003"):
+            rsps.add(rsps_lib.GET, f"{S3_URL}/{ds}/participants.tsv", status=404)
+        rsps.replace(rsps_lib.GET, f"{S3_URL}/ds000001/participants.tsv", status=500)
+        monkeypatch.setenv("OPENNEURO_TIMEOUT", "5")
+        result = CliRunner().invoke(main, ["run", "--skip-transform", "--notify"])
+
+    assert result.exit_code == 1  # partial failure
+    [digest] = captured_alerts
+    assert digest.source == "Test refresh"
+    assert "failed in 'participants'" in digest.issues[0].title
+
+
+def test_notify_stays_quiet_on_clean_run(env, mocked_api, captured_alerts):
+    result = CliRunner().invoke(main, ["run", "--notify"])
+    assert result.exit_code == 0, result.output
+    assert captured_alerts == []
+
+
+def test_notify_reports_a_failed_run(env, captured_alerts, monkeypatch):
+    monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "me/repo")
+    monkeypatch.setenv("GITHUB_RUN_ID", "42")
+    import responses as rsps_lib
+
+    # The API answers with a GraphQL error and no data: the run stops at once.
+    with rsps_lib.RequestsMock() as rsps:
+        rsps.add(rsps_lib.POST, GRAPHQL_URL, json={"errors": [{"message": "schema changed"}]})
+        result = CliRunner().invoke(main, ["run", "--notify"])
+
+    assert result.exit_code != 0
+    [digest] = captured_alerts
+    assert digest.has_failures
+    assert digest.link == "https://github.com/me/repo/actions/runs/42"
+
+
+def test_notify_test_requires_configuration(env, captured_alerts):
+    result = CliRunner().invoke(main, ["notify-test"])
+    assert result.exit_code == EXIT_ERROR
+
+
+def test_dashboard_command(env, mocked_api):
+    runner = CliRunner()
+    assert runner.invoke(main, ["run"]).exit_code == 0
+    result = runner.invoke(main, ["dashboard", "--output", str(env / "site")])
+    assert result.exit_code == 0, result.output
+    assert (env / "site" / "index.html").is_file()
+    assert "4 datasets" in result.output
