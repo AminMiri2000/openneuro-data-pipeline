@@ -1,0 +1,69 @@
+{
+  "data": {
+    "datasets": {
+      "edges": [
+        {
+          "node": {
+            "id": "ds000003",
+            "created": "2024-01-03T10:00:00.000Z",
+            "latestSnapshot": {
+              "id": "ds000003:1.0.0",
+              "tag": "1.0.0",
+              "created": "2024-02-03T10:00:00.000Z",
+              "description": {
+                "Name": "Test EEG dataset 3",
+                "Authors": [
+                  "A. Author",
+                  "B. Author"
+                ],
+                "License": "CC0",
+                "DatasetDOI": "doi:10.18112/openneuro.ds000003.v1.0.0",
+                "BIDSVersion": "1.8.0"
+              },
+              "summary": {
+                "modalities": [
+                  "EEG"
+                ],
+                "subjects": [
+                  "01",
+                  "02",
+                  "03"
+                ],
+                "sessions": [],
+                "tasks": [
+                  "oddball"
+                ],
+                "size": 123456789,
+                "totalFiles": 42
+              }
+            }
+          }
+        },
+        {
+          "node": null
+        },
+        {
+          "node": {
+            "id": "ds000004",
+            "created": "2024-01-04T10:00:00.000Z",
+            "latestSnapshot": null
+          }
+        }
+      ],
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": "cursor-3"
+      }
+    }
+  },
+  "errors": [
+    {
+      "message": "Snapshot could not be resolved",
+      "path": [
+        "datasets",
+        "edges",
+        1
+      ]
+    }
+  ]
+}
