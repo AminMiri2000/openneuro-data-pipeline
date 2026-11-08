@@ -24,6 +24,7 @@ from .extract import ExtractParams, ExtractResult, available
 from .logging_utils import configure_logging
 from .pipeline import Pipeline
 from .sources.openneuro.queries import DATASETS_QUERY
+from .transform.docs_server import serve as serve_docs
 
 EXIT_PARTIAL_FAILURE = 1
 EXIT_ERROR = 2
@@ -142,6 +143,23 @@ def query_cmd(pipeline: Pipeline, sql: str) -> None:
 def transform_cmd(pipeline: Pipeline, select: str | None, full_refresh: bool) -> None:
     """Build the dbt models and run their tests (`dbt build`)."""
     _echo_json(asdict(pipeline.transform(select=select, full_refresh=full_refresh)))
+
+
+@main.command("docs")
+@click.option("--serve", is_flag=True, help="Serve the site locally after generating it.")
+@click.option("--port", type=int, default=8080, show_default=True, help="Port for --serve.")
+@click.option("--no-browser", is_flag=True, help="Do not open a browser window.")
+@click.pass_obj
+def docs_cmd(pipeline: Pipeline, serve: bool, port: int, no_browser: bool) -> None:
+    """Generate the dbt documentation site; with --serve, browse it locally.
+
+    Always regenerates first, so the site matches the current models and data.
+    """
+    site_dir = pipeline.dbt.generate_docs()
+    if serve:
+        serve_docs(site_dir, port, open_browser=not no_browser)
+    else:
+        click.echo(f"Docs generated in {site_dir}")
 
 
 @main.command(

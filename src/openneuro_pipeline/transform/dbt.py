@@ -17,6 +17,7 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from ..config import Settings
@@ -82,11 +83,12 @@ class DbtProject:
 
     def __init__(self, settings: Settings) -> None:
         self.project_dir = settings.dbt_project_dir.resolve()
+        self.target_dir = (settings.data_dir / "dbt" / "target").resolve()
         self._env = {
             # Read by profiles.yml, so dbt targets the same warehouse file.
             "PIPELINE_WAREHOUSE_PATH": str(settings.warehouse_path.resolve()),
             # Honoured by every dbt command (unlike the equivalent CLI flags).
-            "DBT_TARGET_PATH": str((settings.data_dir / "dbt" / "target").resolve()),
+            "DBT_TARGET_PATH": str(self.target_dir),
             "DBT_LOG_PATH": str((settings.data_dir / "dbt" / "logs").resolve()),
         }
 
@@ -98,6 +100,11 @@ class DbtProject:
         if full_refresh:
             args.append("--full-refresh")
         return self.invoke(args)
+
+    def generate_docs(self) -> Path:
+        """Build the documentation site (manifest + catalog) and return its folder."""
+        self.invoke(["docs", "generate"])
+        return self.target_dir
 
     def invoke(self, args: Sequence[str]) -> TransformResult:
         """Run any dbt command, e.g. `["docs", "generate"]`.
