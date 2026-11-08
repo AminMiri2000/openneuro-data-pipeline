@@ -22,8 +22,8 @@ endif
 PIPELINE := $(VENV_PYTHON) -m openneuro_pipeline.cli
 MODALITY ?= EEG
 
-.PHONY: help install check-api extract load transform run backfill query docs docs-serve \
-        freshness test lint typecheck format clean clean-venv
+.PHONY: help install check-api extract load transform run rebuild dagster query docs \
+        docs-serve freshness test lint typecheck format clean clean-venv
 
 help:               ## list targets
 	@$(SYSTEM_PYTHON) scripts/dev.py help Makefile
@@ -50,8 +50,12 @@ transform:          ## build dbt models and run data tests
 run:                ## full batch: extract + load + transform
 	$(PIPELINE) run --modality $(MODALITY)
 
-backfill:           ## re-extract a past day and rebuild: make backfill DATE=2026-11-01
-	$(PIPELINE) run --modality $(MODALITY) --ingest-date $(DATE) --full-refresh
+rebuild:            ## rebuild warehouse + dbt from saved raw files (no API calls)
+	$(PIPELINE) load --full-refresh
+	$(PIPELINE) transform --full-refresh
+
+dagster:            ## Dagster UI, daily schedule and run queue at http://localhost:3000
+	$(PIPELINE) dagster --port 3000
 
 query:              ## read-only SQL on the warehouse: make query SQL="SELECT ..."
 	$(PIPELINE) query "$(SQL)"
