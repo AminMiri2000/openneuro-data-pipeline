@@ -1,0 +1,9 @@
+attribute,pattern,standard_value,example
+sex,\b(female|woman|women|girl)s?\b,female,Physiological female; Self-identifies as a woman
+sex,\b(male|man|men|boy)s?\b,male,Biological male; Self-identifies as a man
+sex,\b(non-?binary|genderqueer|other)\b,other,Non-binary
+sex,\b(prefer not|not reported|unknown|undisclosed|declined|none)\b,,prefer not to respond; None
+handedness,\b(right|rigth|righty|dextral)\b,right,Right handed (LQ > 0); Rigth handed; Right Hand Dominant
+handedness,\b(left|lefty|sinistral)\b,left,Left handed (LQ <= 0)
+handedness,\b(ambidextrous|ambidexter|ambi|mixed|both)\b,ambidextrous,Mixed-handed
+handedness,\b(prefer not|not reported|unknown|none)\b,,unknown

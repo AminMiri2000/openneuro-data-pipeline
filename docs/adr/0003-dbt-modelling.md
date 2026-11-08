@@ -67,3 +67,20 @@ The first full run loaded 469 EEG datasets and 26,174 participant rows from
   git, isolated per data directory.
 - The pipeline's own Python test suite runs a real `dbt build` on fixture
   data, so a model change that breaks the integration fails CI.
+
+## Amendment (2026-11-08): pattern fallback and undocumented numbers
+
+The first full build standardised 85% of sex values and 72% of handedness
+values. The remaining "unmapped" values were mostly descriptive labels from
+data dictionaries ("Physiological female", "Right handed (LQ > 0)", "Rigth
+handed") and bare numbers with no dictionary (sex `0`/`1`/`2`, handedness
+`0.88`).
+
+- **Whole-word patterns** (`attribute_value_patterns` seed) are tried when no
+  exact match exists. A value matching patterns for different categories is
+  `ambiguous` rather than guessed.
+- **Bare numbers without a dictionary are never mapped.** Datasets disagree
+  on whether `1` means male or female, and handedness scores use
+  study-specific cut-offs. They get their own status, `undocumented_numeric`,
+  so `unmapped` remains a worklist of values a seed row could fix.
+- `match_method` (`exact` / `pattern`) records how each value was recognised.

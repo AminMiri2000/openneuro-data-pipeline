@@ -7,8 +7,9 @@
 --                (Age -> age, gender -> sex, hand -> handedness, ...)
 --   3. decode    coded values with the dataset's own data dictionary
 --                ("Gender": "2" + Levels {"2": "Female"} -> "Female")
---   4. convert   to a standard value: age in years (honouring declared units),
---                sex and handedness via lookup seeds
+--   4. convert   to a standard value: age in years (honouring declared units);
+--                sex and handedness by exact lookup, then by word patterns
+--                ("Physiological female", "Right handed (LQ > 0)")
 --   5. classify  each value with a parse_status, so data quality is measurable
 --                instead of silently dropped
 --
@@ -93,7 +94,7 @@ decoded as (
 ),
 
 -- 4. convert ---------------------------------------------------------------
-converted as (
+exact_matched as (
 
     select
         dec.*,
@@ -108,8 +109,8 @@ converted as (
             end
         end                                         as age_years_unchecked,
 
-        sv.value_key is not null or hv.value_key is not null as matched_lookup,
-        coalesce(sv.sex, hv.handedness)             as category_value
+        sv.value_key is not null or hv.value_key is not null as is_exact_match,
+        coalesce(sv.sex, hv.handedness)             as exact_value
 
     from decoded as dec
     left join {{ ref('sex_values') }} as sv
@@ -118,6 +119,55 @@ converted as (
     left join {{ ref('handedness_values') }} as hv
         on  dec.attribute = 'handedness'
         and {{ normalise_key('dec.decoded_value') }} = hv.value_key
+
+),
+
+-- Pattern fallback, tried only for category values with no exact match.
+pattern_hits as (
+
+    select
+        e.participant_row_key,
+        e.source_column,
+        p.standard_value
+    from exact_matched as e
+    inner join {{ ref('attribute_value_patterns') }} as p
+        on  e.attribute = p.attribute
+        and not e.is_exact_match
+        and e.decoded_value is not null
+        and regexp_matches(e.decoded_value, p.pattern, 'i')
+
+),
+
+-- Patterns pointing to different categories make a value ambiguous.
+pattern_resolved as (
+
+    select
+        participant_row_key,
+        source_column,
+        count(distinct coalesce(standard_value, '<unknown>')) as n_categories,
+        any_value(standard_value)                             as pattern_value
+    from pattern_hits
+    group by participant_row_key, source_column
+
+),
+
+converted as (
+
+    select
+        e.*,
+        case
+            when e.is_exact_match     then 'exact'
+            when r.n_categories = 1   then 'pattern'
+        end                                         as match_method,
+        case
+            when e.is_exact_match     then e.exact_value
+            when r.n_categories = 1   then r.pattern_value
+        end                                         as category_value,
+        coalesce(r.n_categories > 1, false)         as is_ambiguous
+    from exact_matched as e
+    left join pattern_resolved as r
+        on  e.participant_row_key = r.participant_row_key
+        and e.source_column = r.source_column
 
 ),
 
@@ -136,6 +186,7 @@ classified as (
         decoded_value,
         was_decoded,
         units,
+        match_method,
 
         case
             when attribute = 'age'
@@ -152,8 +203,14 @@ classified as (
                  and not (age_years_unchecked > 0 and age_years_unchecked < 120)
                                                                          then 'out_of_range'
             when attribute = 'age'                                       then 'ok'
-            when not matched_lookup                                      then 'unmapped'
-            -- a known "unknown" spelling, e.g. "U" or "not reported"
+            when is_ambiguous                                            then 'ambiguous'
+            -- A bare number with no data dictionary: a code ("1") or a score
+            -- ("0.88") whose meaning differs between datasets. Never guessed.
+            when match_method is null
+                 and regexp_full_match(trim(decoded_value), '[-+]?[0-9]+([.][0-9]+)?')
+                                                                         then 'undocumented_numeric'
+            when match_method is null                                    then 'unmapped'
+            -- a known "unknown" value, e.g. "U" or "prefer not to respond"
             when category_value is null                                  then 'missing'
             else 'ok'
         end                                         as parse_status
