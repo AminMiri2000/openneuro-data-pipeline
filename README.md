@@ -12,7 +12,7 @@ answer questions the OpenNeuro website can't, such as:
 It costs nothing to run: public APIs, local storage, DuckDB, dbt, Dagster and
 other open-source tools.
 
-**Live dashboard:** _published to GitHub Pages after the first daily refresh on `main`._
+**Live dashboard:** [aminmiri2000.github.io/openneuro-data-pipeline](https://aminmiri2000.github.io/openneuro-data-pipeline/) · [data model docs](https://aminmiri2000.github.io/openneuro-data-pipeline/dbt-docs/) — refreshed daily by GitHub Actions.
 
 ## Architecture
 
