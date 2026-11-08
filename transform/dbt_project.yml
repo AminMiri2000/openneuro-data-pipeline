@@ -24,6 +24,9 @@ vars:
   # run. Covers same-day re-runs and short backfills; older backfills need
   # `--full-refresh` (see docs/adr/0003).
   incremental_lookback_days: 3
+  # Data-quality thresholds (warn-level tests in tests/data_quality/).
+  max_catalogue_drop: 0.10          # tolerated day-on-day drop in dataset count
+  min_standardisation_rate: 0.95    # share of provided demographic values standardised
 
 models:
   openneuro:
