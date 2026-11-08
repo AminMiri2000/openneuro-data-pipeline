@@ -99,12 +99,34 @@ def check_python(root: Path) -> int:
     return 0
 
 
-def clean_venv(root: Path) -> None:
+def clean_venv(root: Path) -> int:
     """Delete the virtualenv so `make install` can recreate it."""
     venv = root / VENV_DIR
-    if venv.is_dir():
+    if not venv.is_dir():
+        return 0
+    # On Windows a running program's files cannot be deleted. If this script
+    # runs on the venv's own python (an activated venv), deleting it would
+    # fail half-way, so stop before touching anything.
+    if Path(sys.prefix).resolve() == venv.resolve():
+        print(
+            f"{VENV_DIR} is active in this terminal, so it cannot delete itself.\n"
+            "Run `deactivate`, then `make clean-venv` again.",
+            file=sys.stderr,
+        )
+        return 1
+    try:
         shutil.rmtree(venv)
-        print(f"removed {VENV_DIR}/")
+    except PermissionError as exc:
+        print(
+            f"Could not delete {VENV_DIR}: {exc}\n"
+            "Another program is using it (often an editor's Python extension or a\n"
+            "terminal where it is activated). Close those, then run `make clean-venv`\n"
+            "again; files already removed do not need to be restored.",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"removed {VENV_DIR}/")
+    return 0
 
 
 def main(argv: list[str]) -> int:
@@ -115,7 +137,7 @@ def main(argv: list[str]) -> int:
     elif argv == ["clean"]:
         clean(Path.cwd())
     elif argv == ["clean-venv"]:
-        clean_venv(Path.cwd())
+        return clean_venv(Path.cwd())
     else:
         print(__doc__, file=sys.stderr)
         return 2

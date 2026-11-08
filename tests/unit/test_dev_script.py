@@ -47,3 +47,22 @@ def test_clean_targets(tmp_path, monkeypatch, target):
         assert not (tmp_path / "data" / "raw").exists() and (tmp_path / ".venv").exists()
     else:
         assert not (tmp_path / ".venv").exists() and (tmp_path / "data" / "raw").exists()
+
+
+def test_clean_venv_refuses_to_delete_the_running_venv(tmp_path, monkeypatch, capsys):
+    (tmp_path / ".venv").mkdir()
+    monkeypatch.setattr(sys, "prefix", str(tmp_path / ".venv"))
+    assert dev.clean_venv(tmp_path) == 1
+    assert (tmp_path / ".venv").exists()
+    assert "deactivate" in capsys.readouterr().err
+
+
+def test_clean_venv_explains_locked_files(tmp_path, monkeypatch, capsys):
+    (tmp_path / ".venv").mkdir()
+
+    def locked(_path):
+        raise PermissionError("[WinError 5] Access is denied")
+
+    monkeypatch.setattr(dev.shutil, "rmtree", locked)
+    assert dev.clean_venv(tmp_path) == 1
+    assert "Another program is using it" in capsys.readouterr().err
